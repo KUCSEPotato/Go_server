@@ -11,7 +11,7 @@
     - db 혹은 redis 사용하여 선착순 구현
 ## db 구조
 https://dbdiagram.io/d/locker-sever-db-68b51f3a777b52b76c695e34
-![alt text](image-1.png)
+![alt text](/Go_server/locker-server/image-1.png)
 ``` dbml
 Project locker_reservation {
   database_type: 'PostgreSQL'
@@ -123,7 +123,7 @@ Ref: locker_assignments.locker_id  > locker_info.locker_id
 
 ```
 ## 프론트 화면
-![alt text](image.png)
+![alt text](/Go_server/locker-server/image.png)
 
 ## project 디렉토리 구조
 ``` text
