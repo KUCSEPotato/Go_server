@@ -1,0 +1,51 @@
+package util
+
+import (
+	"fmt"
+	"os"
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+)
+
+// IssueAccessToken: 학번(studentID)을 sub로 하는 HS256 JWS 발급
+// - iss/aud/iat/exp 등 표준 클레임을 채워 넣는다.
+// - 운영에서 비대칭(EdDSA)로 바꾸면 공개키 배포/JWKS 도입이 용이.
+func IssueAccessToken(studentID string) (string, error) {
+	secret := []byte(os.Getenv("JWT_ACCESS_SECRET")) // 절대 유출 금지
+	iss := os.Getenv("JWT_ISS")                      // 발급자
+	aud := os.Getenv("JWT_AUD")                      // 대상
+	ttlMin := EnvInt("JWT_ACCESS_TTL_MIN", 10)       // 만료(분)
+
+	now := time.Now()
+
+	// JWT payload(클레임)
+	claims := jwt.MapClaims{
+		"sub": studentID,                                           // 누가(학번)
+		"iss": iss,                                                 // 누가 발급
+		"aud": aud,                                                 // 누구에게 유효
+		"iat": now.Unix(),                                          // 발급 시각
+		"exp": now.Add(time.Duration(ttlMin) * time.Minute).Unix(), // 만료 시각
+	}
+
+	// 헤더의 alg는 HS256, typ는 JWT
+	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tok.Header["typ"] = "JWT"
+	tok.Header["kid"] = "hs256-main" // 키 식별자(로테이션 대비, 지금은 고정 값)
+
+	// 서명 후 compact 토큰 문자열 반환
+	return tok.SignedString(secret)
+}
+
+// EnvInt: 환경변수를 정수로 읽는 작은 헬퍼 (비었거나 파싱 실패 시 def 반환)
+func EnvInt(key string, def int) int {
+	v := os.Getenv(key)
+	if v == "" {
+		return def
+	}
+	var x int
+	if _, err := fmt.Sscan(v, &x); err != nil || x <= 0 {
+		return def
+	}
+	return x
+}
