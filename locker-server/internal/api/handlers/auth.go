@@ -6,11 +6,11 @@ import (
 	"net"
 	"time"
 
+	"github.com/KUCSEPotato/locker-server/internal/util"
 	"github.com/gofiber/fiber/v2"
 	"github.com/jackc/pgx/v5"         // ErrNoRows 등 에러 타입 사용
 	"github.com/jackc/pgx/v5/pgxpool" // 커넥션 풀
 	"github.com/redis/go-redis/v9"    // 의존성 주입 구조체에 포함 (여기선 직접 사용X)
-	"github.com/yourname/locker-server/internal/util"
 )
 
 // Deps: 핸들러들이 의존하는 리소스(DB, Redis 등)를 담는 구조체

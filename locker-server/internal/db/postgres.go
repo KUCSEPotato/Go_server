@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/pgxpool" // pgx 커넥션 풀
 )
 
 // NewPool: 환경변수 DB_URL을 읽어 커넥션 풀을 생성하고 Ping으로 연결 확인

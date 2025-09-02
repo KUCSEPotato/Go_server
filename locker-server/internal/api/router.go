@@ -4,9 +4,9 @@ import (
 	"github.com/gofiber/fiber/v2"
 
 	// 실제 요청을 처리하는 핸들러
-	"github.com/KUCESPotato/locker-server/internal/api/handlers"
+	"github.com/KUCSEPotato/locker-server/internal/api/handlers"
 	// JWT 인증 미들웨어
-	"github.com/KUCESPotato/locker-server/internal/api/middleware"
+	"github.com/KUCSEPotato/locker-server/internal/api/middleware"
 )
 
 // Setup 함수는 main에서 호출되어 라우터 트리를 구성한다.

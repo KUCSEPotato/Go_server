@@ -12,13 +12,19 @@ import (
 	// recover: 핸들러 내부에서 panic이 나도 서버가 죽지 않게 막아주는 미들웨어
 	"github.com/gofiber/fiber/v2/middleware/recover"
 
-	"github.com/KUCESPotato/locker-server/internal/api"
-	"github.com/KUCESPotato/locker-server/internal/api/handlers"
-	"github.com/KUCESPotato/locker-server/internal/cache"
-	"github.com/KUCESPotato/locker-server/internal/db"
+	"github.com/KUCSEPotato/locker-server/internal/api"
+	"github.com/KUCSEPotato/locker-server/internal/api/handlers"
+	"github.com/KUCSEPotato/locker-server/internal/cache"
+	"github.com/KUCSEPotato/locker-server/internal/db"
+
+	// .env 자동 로딩
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	// env 파일 로딩
+	_ = godotenv.Load(".env")
+
 	// 서버의 표준 시간대(로그 타임스탬프 등)를 서울로 고정
 	_ = os.Setenv("TZ", "Asia/Seoul")
 
