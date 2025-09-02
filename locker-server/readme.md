@@ -1,5 +1,31 @@
+# TODO
+1. swagger docs 제작 [done 250902]
+2. docker로 서버 띄어서 테스트 [done 250902]
+3. api test
+  - docker에 db 띄우기
+4. api 수정
+
+
 # 고려대학교 정보대학 제9대 학생회 사물함 서버 개발
 - 기술 스택: Go + Fiber + postgresql
+
+# 구현 사항
+- docker
+  - docker 띄우기
+    - docker compose up -d
+  - 실행 확인
+    - docker ps
+    - docker ps -a
+    - docker compose ps
+    - docker info
+- 서버 닫을 때는 컨트롤 + z
+  - failed to listen: listen tcp4 :3000: bind: address already in use 인 경우
+    - lsof -i :3000
+    - kill -9 "pid"
+- swag 명령어가 안될 경우
+  - export PATH=$PATH:$(go env GOPATH)/bin 
+  - 환경 변수 설정 필요
+
 ## 필요한 구현 사항
 1. 학번, 이름, 전화번호로 로그인
     - 학번으로 JWT token 발급
@@ -9,9 +35,10 @@
     - 사물함 정보를 저장하는 테이블 필요
 3. 사물함 신청
     - db 혹은 redis 사용하여 선착순 구현
+    
 ## db 구조
 https://dbdiagram.io/d/locker-sever-db-68b51f3a777b52b76c695e34
-![alt text](image-1.png)
+![alt text](/locker-server/image-1.png)
 ``` dbml
 Project locker_reservation {
   database_type: 'PostgreSQL'
@@ -123,7 +150,7 @@ Ref: locker_assignments.locker_id  > locker_info.locker_id
 
 ```
 ## 프론트 화면
-![alt text](image.png)
+![alt text](/locker-server/image.png)
 
 ## project 디렉토리 구조
 ``` text

@@ -13,6 +13,8 @@ import (
 	"context"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -60,6 +62,11 @@ func main() {
 		// BodyLimit, ProxyHeader 등도 상황에 따라 추가 가능
 	})
 
+	// root 경로 핸들러
+	app.Get("/", func(c *fiber.Ctx) error {
+		return c.SendString("Welcome to the Locker Reservation API")
+	})
+
 	// 전역 미들웨어 장착
 	app.Use(
 		logger.New(),  // 요청 로그 출력
@@ -74,6 +81,30 @@ func main() {
 
 	// swagger
 	app.Get("/swagger/*", fiberSwagger.WrapHandler)
+
+	// 서버 종료 신호 처리
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+
+	// Fiber 서버를 goroutine으로 실행
+	go func() {
+		if err := app.Listen(os.Getenv("APP_ADDR")); err != nil {
+			log.Printf("Fiber server stopped: %v", err)
+		}
+	}()
+
+	<-c // 종료 신호 대기
+	log.Println("Shutting down server...")
+	_ = app.Shutdown()
+
+	// log.Fatal(app.Listen(os.Getenv("APP_ADDR")))
+	// 서버 종료 코드 끝
+
+	// 라우팅 트리 구성
+	// api.Setup(app, deps)
+
+	// swagger
+	// app.Get("/swagger/*", fiberSwagger.WrapHandler)
 
 	// HTTP 서버 시작 (예: :3000)
 	log.Fatal(app.Listen(os.Getenv("APP_ADDR")))

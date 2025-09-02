@@ -7,6 +7,7 @@ import (
 	"github.com/KUCSEPotato/locker-server/internal/api/handlers"
 	// JWT 인증 미들웨어
 	"github.com/KUCSEPotato/locker-server/internal/api/middleware"
+	// fiberSwagger "github.com/swaggo/fiber-swagger"
 )
 
 // Setup 함수는 main에서 호출되어 라우터 트리를 구성한다.
@@ -30,5 +31,5 @@ func Setup(app *fiber.App, deps handlers.Deps) {
 	authed.Post("/lockers/:id/release", handlers.ReleaseLocker(deps)) // 해제
 
 	// swagger
-	// app.Get("/swagger/*", fiberSwagger.WrapHandler(fiberSwagger.Handler))
+	// app.Get("/swagger/*", fiberSwagger.WrapHandler)
 }

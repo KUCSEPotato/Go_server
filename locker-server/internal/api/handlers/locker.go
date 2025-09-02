@@ -16,8 +16,25 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
+// Locker Response
+type LockerResponse struct {
+	LockerID   int    `json:"locker_id"`
+	LocationID int    `json:"location_id"`
+	Owner      string `json:"owner,omitempty"` // null 가능
+}
+
 // ListLockers: 사물함 목록 조회
 // - locker_info + locker_locations 조인하여 위치명까지 함께 반환
+// ListLockers godoc
+// @Summary      사물함 목록 조회
+// @Description  사용 가능한 사물함 목록을 반환합니다
+// @Tags         lockers
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200 {array} LockerResponse
+// @Failure      401 {object} ErrorResponse
+// @Router       /lockers [get]
 func ListLockers(d Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		rows, err := d.DB.Query(c.Context(),
@@ -30,17 +47,11 @@ func ListLockers(d Deps) fiber.Handler {
 		}
 		defer rows.Close()
 
-		// 응답용 구조체(Owner는 null 가능)
-		type item struct {
-			LockerID int    `json:"locker_id"`
-			Owner    *int   `json:"owner,omitempty"`
-			Location string `json:"location"`
-		}
-		var out []item
+		var out []LockerResponse
 
 		for rows.Next() {
-			var it item
-			if err := rows.Scan(&it.LockerID, &it.Owner, &it.Location); err != nil {
+			var it LockerResponse
+			if err := rows.Scan(&it.LockerID, &it.Owner, &it.LocationID); err != nil {
 				return fiber.ErrInternalServerError
 			}
 			out = append(out, it)
@@ -53,6 +64,18 @@ func ListLockers(d Deps) fiber.Handler {
 // 1) Redis SETNX(key, student, TTL=2분) → 성공 시 첫 클릭 인정
 // 2) DB에 locker_assignments(state='hold') 기록 (부분 유니크 인덱스로 중복 방지)
 // - 실패 케이스: 이미 hold/confirmed가 존재 → 409
+// HoldLocker godoc
+// @Summary      사물함 선점
+// @Description  특정 사물함을 선점합니다.
+// @Tags         lockers
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id path int true "사물함 ID"
+// @Success      200 {object} LockerResponse
+// @Failure      400 {object} ErrorResponse
+// @Failure      401 {object} ErrorResponse
+// @Router       /lockers/{id}/hold [post]
 func HoldLocker(d Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		// URL 파라미터에서 locker id 추출
@@ -101,6 +124,18 @@ func HoldLocker(d Deps) fiber.Handler {
 // ConfirmLocker: "확정"
 // - 내 hold가 유효(만료 전)해야 함
 // - 트랜잭션으로 assignments를 confirmed로 바꾸고, locker_info.owner를 내 학번으로 설정
+// ConfirmLocker godoc
+// @Summary      사물함 확정
+// @Description  선점한 사물함을 확정합니다.
+// @Tags         lockers
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id path int true "사물함 ID"
+// @Success      200 {object} LockerResponse
+// @Failure      400 {object} ErrorResponse
+// @Failure      401 {object} ErrorResponse
+// @Router       /lockers/{id}/confirm [post]
 func ConfirmLocker(d Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		// 파라미터 파싱
@@ -152,6 +187,18 @@ func ConfirmLocker(d Deps) fiber.Handler {
 
 // ReleaseLocker: "해제"
 // - confirmed 상태인 내 사물함을 취소하고, locker_info.owner=NULL
+// ReleaseLocker godoc
+// @Summary      사물함 해제
+// @Description  선점한 사물함을 해제합니다.
+// @Tags         lockers
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id path int true "사물함 ID"
+// @Success      200 {object} LockerResponse
+// @Failure      400 {object} ErrorResponse
+// @Failure      401 {object} ErrorResponse
+// @Router       /lockers/{id}/release [post]
 func ReleaseLocker(d Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		id, err := strconv.Atoi(c.Params("id"))

@@ -31,18 +31,51 @@ type Deps struct {
 	RDB *redis.Client // Redis 클라이언트(여기 파일에선 사용 안하지만 통일성 위해 포함)
 }
 
+// 요청, 응답 구조체 정의
+type LoginRequest struct {
+	StudentID string `json:"student_id"`
+	Name      string `json:"name"`
+	Phone     string `json:"phone_number"`
+}
+
+type LoginResponse struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+}
+
+// token
+type RefreshRequest struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
+// 취약점 주의: hardcoded-credentials Embedding credentials in source code risks unauthorized access
+type RefreshResponse struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+}
+
 // Login 핸들러: 학번/이름/폰번호가 users에 존재하면 Access/Refresh 발급
+// Login godoc
+// @Summary      로그인 (학번/이름/전화번호 확인)
+// @Description  일치하는 사용자가 있으면 Access/Refresh 토큰 발급
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        payload body LoginRequest true "로그인 정보"
+// @Success      200 {object} LoginResponse
+// @Failure      400 {object} ErrorResponse
+// @Failure      401 {object} ErrorResponse
+// @Router       /auth/login [post]
 func Login(d Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		// 1) 요청 바디(JSON) 파싱
-		var req struct {
-			StudentID string `json:"student_id"`   // 학번
-			Name      string `json:"name"`         // 이름
-			Phone     string `json:"phone_number"` // 전화번호
-		}
+		var req LoginRequest
 		if err := c.BodyParser(&req); err != nil {
 			// JSON 파싱 실패 → 400
 			return fiber.ErrBadRequest
+		}
+		if req.Name == "" || req.Phone == "" {
+			return fiber.NewError(fiber.StatusBadRequest, "missing fields")
 		}
 
 		// 아주 기초적인 유효성 검사(필드 비었는지 등)
@@ -108,6 +141,17 @@ func Login(d Deps) fiber.Handler {
 }
 
 // Refresh 핸들러: refresh 토큰 평문을 받아서 DB의 해시와 비교 후, 새로운 Access 발급
+// Refresh godoc
+// @Summary      토큰 갱신
+// @Description  Refresh 토큰을 사용하여 새로운 Access 토큰을 발급합니다.
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        payload body RefreshRequest true "토큰 갱신 요청 정보"
+// @Success      200 {object} RefreshResponse
+// @Failure      400 {object} ErrorResponse
+// @Failure      401 {object} ErrorResponse
+// @Router       /auth/refresh [post]
 func Refresh(d Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		// 1) 요청 바디(JSON) 파싱
@@ -153,6 +197,9 @@ func Refresh(d Deps) fiber.Handler {
 
 // clientIP: Fiber 컨텍스트에서 클라이언트 IP를 추출
 // - 신뢰 프록시 뒤에 있다면 Fiber Config의 ProxyHeader/TrustedProxy 설정을 고려해야 함
+// clientIP godoc
+// @summary      클라이언트 IP 추출
+// @description  Fiber 컨텍스트에서 클라이언트 IP를 추출합니다.
 func clientIP(c *fiber.Ctx) string {
 	ip := c.IP()
 	if net.ParseIP(ip) == nil {
