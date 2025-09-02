@@ -28,4 +28,7 @@ func Setup(app *fiber.App, deps handlers.Deps) {
 	authed.Post("/lockers/:id/hold", handlers.HoldLocker(deps))       // 사물함 홀드(선점)
 	authed.Post("/lockers/:id/confirm", handlers.ConfirmLocker(deps)) // 확정
 	authed.Post("/lockers/:id/release", handlers.ReleaseLocker(deps)) // 해제
+
+	// swagger
+	// app.Get("/swagger/*", fiberSwagger.WrapHandler(fiberSwagger.Handler))
 }

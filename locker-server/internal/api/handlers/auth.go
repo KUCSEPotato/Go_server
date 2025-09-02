@@ -1,3 +1,14 @@
+// Login
+// @Summary      로그인 (학번/이름/전화번호 확인)
+// @Description  일치하는 사용자가 있으면 Access/Refresh 토큰 발급
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        payload body struct{StudentID string `json:"student_id"`; Name string `json:"name"`; Phone string `json:"phone_number"`} true "로그인 정보"
+// @Success      200 {object} map[string]string "access_token, refresh_token"
+// @Failure      400 {object} map[string]any
+// @Failure      401 {object} map[string]any
+// @Router       /auth/login [post]
 package handlers
 
 import (

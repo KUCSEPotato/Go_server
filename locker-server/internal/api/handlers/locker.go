@@ -1,3 +1,12 @@
+// ListLockers
+// @Summary      사물함 목록 조회
+// @Description  locker_info + locker_locations 조인 결과 반환
+// @Tags         lockers
+// @Security     BearerAuth
+// @Produce      json
+// @Success      200 {array}  struct{LockerID int `json:"locker_id"`; Owner *int `json:"owner,omitempty"`; Location string `json:"location"`}
+// @Failure      401 {object} map[string]any
+// @Router       /lockers [get]
 package handlers
 
 import (

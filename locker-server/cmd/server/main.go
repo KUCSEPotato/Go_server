@@ -1,3 +1,12 @@
+// @title           Locker Reservation API
+// @version         1.0
+// @description     사물함 선착순 예약 시스템의 백엔드 API 문서
+// @BasePath        /api/v1
+
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description Bearer {access_token}
 package main
 
 import (
@@ -19,11 +28,16 @@ import (
 
 	// .env 자동 로딩
 	"github.com/joho/godotenv"
+
+	// swagger
+	_ "github.com/KUCSEPotato/locker-server/docs"
+	fiberSwagger "github.com/swaggo/fiber-swagger" // fiberSwagger
 )
 
 func main() {
 	// env 파일 로딩
-	_ = godotenv.Load(".env")
+	// 상대 경로: ../configs/.env
+	_ = godotenv.Load("/Users/potato/Desktop/Dev/Go_server/locker-server/configs/.env")
 
 	// 서버의 표준 시간대(로그 타임스탬프 등)를 서울로 고정
 	_ = os.Setenv("TZ", "Asia/Seoul")
@@ -57,6 +71,9 @@ func main() {
 
 	// 라우팅 트리 구성
 	api.Setup(app, deps)
+
+	// swagger
+	app.Get("/swagger/*", fiberSwagger.WrapHandler)
 
 	// HTTP 서버 시작 (예: :3000)
 	log.Fatal(app.Listen(os.Getenv("APP_ADDR")))
