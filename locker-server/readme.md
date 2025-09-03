@@ -19,7 +19,15 @@
     - docker compose ps
     - docker info
   - postgresql 컨테이너 접속
-    - docker exec -it locker_postgres psql -U locker -d locker
+    - docker exec -it locker-server-pg-1 psql -U locker -d locker
+      - # locker_assignments 초기화
+      - TRUNCATE locker_assignments RESTART IDENTITY;
+      - # locker_info 초기화
+      - UPDATE locker_info SET owner = NULL;
+      - # 확인
+      - SELECT * FROM locker_assignments;
+      - SELECT * FROM locker_info;
+    - docker exec -it locker-server-redis-1 redis-cli
 - 서버 닫을 때는 컨트롤 + z
   - failed to listen: listen tcp4 :3000: bind: address already in use 인 경우
     - lsof -i :3000

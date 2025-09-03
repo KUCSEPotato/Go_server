@@ -1,6 +1,8 @@
 package util
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"os"
 	"time"
@@ -8,6 +10,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
+/*
 func GenerateTokens(studentID string) (string, string, error) {
 	// Access Token (10분)
 	accessClaims := jwt.MapClaims{
@@ -35,6 +38,7 @@ func GenerateTokens(studentID string) (string, string, error) {
 
 	return accessTokenString, refreshTokenString, nil
 }
+*/
 
 // IssueAccessToken: 학번(studentID)을 sub로 하는 HS256 JWS 발급
 // - iss/aud/iat/exp 등 표준 클레임을 채워 넣는다.
@@ -77,3 +81,37 @@ func EnvInt(key string, def int) int {
 	}
 	return x
 }
+
+// RandomToken: 안전한 랜덤 토큰 생성 (auth.go에서 사용)
+func RandomToken(length int) string {
+	bytes := make([]byte, length)
+	rand.Read(bytes)
+	return base64.RawURLEncoding.EncodeToString(bytes)
+}
+
+/*
+// VerifyAccessToken: Access 토큰 검증 (미들웨어에서 사용)
+func VerifyAccessToken(tokenStr string) (jwt.MapClaims, error) {
+	secret := []byte(os.Getenv("JWT_ACCESS_SECRET"))
+	iss := os.Getenv("JWT_ISS")
+	aud := os.Getenv("JWT_AUD")
+
+	token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (any, error) {
+		if t.Method.Alg() != jwt.SigningMethodHS256.Alg() {
+			return nil, jwt.ErrSignatureInvalid
+		}
+		return secret, nil
+	}, jwt.WithIssuer(iss), jwt.WithAudience(aud))
+
+	if err != nil || !token.Valid {
+		return nil, err
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return nil, jwt.ErrInvalidKey
+	}
+
+	return claims, nil
+}
+*/

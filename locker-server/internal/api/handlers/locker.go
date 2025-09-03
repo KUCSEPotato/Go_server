@@ -92,8 +92,8 @@ func HoldLocker(d Deps) fiber.Handler {
 		// Redis 키: "locker:hold:{id}"
 		key := "locker:hold:" + strconv.Itoa(id)
 
-		// SETNX: 키가 없을 때만 set + TTL(2분). true=성공(첫 클릭), false=이미 누군가 보유중
-		ok, err := d.RDB.SetNX(c.Context(), key, student, 2*time.Minute).Result()
+		// SETNX: 키가 없을 때만 set + TTL(5분). true=성공(첫 클릭), false=이미 누군가 보유중
+		ok, err := d.RDB.SetNX(c.Context(), key, student, 5*time.Minute).Result()
 		if err != nil {
 			// Redis 장애 → 503(Service Unavailable)
 			return fiber.ErrServiceUnavailable
@@ -180,7 +180,7 @@ func ConfirmLocker(d Deps) fiber.Handler {
 		}
 
 		// 성공 → 204 No Content
-		return c.SendStatus(fiber.StatusNoContent)
+		return c.JSON(fiber.Map{"message": "locker confirmed successfully"})
 	}
 }
 
