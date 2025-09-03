@@ -76,6 +76,18 @@ func main() {
 	// 의존성 주입용 구조체(핸들러들이 DB/Redis에 접근할 때 사용)
 	deps := handlers.Deps{DB: pool, RDB: rdb}
 
+	// Redis connection test
+	log.Printf("Testing Redis connection to: %s", os.Getenv("REDIS_ADDR"))
+
+	testctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := deps.RDB.Ping(testctx).Err(); err != nil {
+		log.Printf("Redis connection failed: %v", err)
+	} else {
+		log.Printf("Redis connected successfully")
+	}
+
 	// 라우팅 트리 구성
 	api.Setup(app, deps)
 
@@ -97,15 +109,6 @@ func main() {
 	log.Println("Shutting down server...")
 	_ = app.Shutdown()
 
-	// log.Fatal(app.Listen(os.Getenv("APP_ADDR")))
-	// 서버 종료 코드 끝
-
-	// 라우팅 트리 구성
-	// api.Setup(app, deps)
-
-	// swagger
-	// app.Get("/swagger/*", fiberSwagger.WrapHandler)
-
 	// HTTP 서버 시작 (예: :3000)
-	log.Fatal(app.Listen(os.Getenv("APP_ADDR")))
+	// log.Fatal(app.Listen(os.Getenv("APP_ADDR")))
 }

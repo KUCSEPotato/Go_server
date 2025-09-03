@@ -8,6 +8,34 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
+func GenerateTokens(studentID string) (string, string, error) {
+	// Access Token (10분)
+	accessClaims := jwt.MapClaims{
+		"student_id": studentID,
+		"exp":        time.Now().Add(10 * time.Minute).Unix(),
+		"iss":        os.Getenv("JWT_ISS"),
+		"aud":        os.Getenv("JWT_AUD"),
+	}
+	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, accessClaims)
+	accessTokenString, err := accessToken.SignedString([]byte(os.Getenv("JWT_ACCESS_SECRET")))
+	if err != nil {
+		return "", "", err
+	}
+
+	// Refresh Token (2주)
+	refreshClaims := jwt.MapClaims{
+		"student_id": studentID,
+		"exp":        time.Now().Add(336 * time.Hour).Unix(),
+	}
+	refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, refreshClaims)
+	refreshTokenString, err := refreshToken.SignedString([]byte(os.Getenv("JWT_ACCESS_SECRET")))
+	if err != nil {
+		return "", "", err
+	}
+
+	return accessTokenString, refreshTokenString, nil
+}
+
 // IssueAccessToken: 학번(studentID)을 sub로 하는 HS256 JWS 발급
 // - iss/aud/iat/exp 등 표준 클레임을 채워 넣는다.
 // - 운영에서 비대칭(EdDSA)로 바꾸면 공개키 배포/JWKS 도입이 용이.

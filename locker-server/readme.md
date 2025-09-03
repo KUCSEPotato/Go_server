@@ -18,6 +18,8 @@
     - docker ps -a
     - docker compose ps
     - docker info
+  - postgresql 컨테이너 접속
+    - docker exec -it locker_postgres psql -U locker -d locker
 - 서버 닫을 때는 컨트롤 + z
   - failed to listen: listen tcp4 :3000: bind: address already in use 인 경우
     - lsof -i :3000
@@ -55,7 +57,7 @@ Enum assignment_state {
 
 /* ===== USERS ===== */
 Table users {
-  student_id      int           [pk, not null, note: '학번 (PK)']
+  student_id      varchar(20)           [pk, not null, note: '학번 (PK)']
   name            varchar(100)  [not null]
   phone_number    varchar(32)   [not null, unique, note: '중복 가입 방지']
   // is_admin      boolean       [not null, default: false] // 필요 시 활성화
@@ -82,6 +84,14 @@ Ref: auth_refresh_tokens.student_id > users.student_id
 /* ===== LOCATIONS (코드값 테이블화) ===== */
 Table locker_locations {
   location_id     serial        [pk]
+  /* 
+  정보관 지하 1층 - 엘리베이터: 1 
+  정보관 지하 1층 - 기계실: 2 
+  정보관 2층: 3 
+  정보관 3층: 4 
+  과학도서관 6층 - 왼쪽: 5 
+  과학도서관 6층 - 오른쪽: 6 
+  */
   name            text          [not null, unique, note: '예: 정보관 B1 엘리베이터, 정보관 B1 기계실, 정보관 2층, ...']
 }
 

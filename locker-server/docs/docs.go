@@ -306,7 +306,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "location_id": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "locker_id": {
                     "type": "integer"

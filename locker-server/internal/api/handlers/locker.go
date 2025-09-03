@@ -18,9 +18,9 @@ import (
 
 // Locker Response
 type LockerResponse struct {
-	LockerID   int    `json:"locker_id"`
-	LocationID int    `json:"location_id"`
-	Owner      string `json:"owner,omitempty"` // null 가능
+	LockerID   int     `json:"locker_id"`
+	LocationID string  `json:"location_id"`
+	Owner      *string `json:"owner,omitempty"` // null 가능
 }
 
 // ListLockers: 사물함 목록 조회
@@ -39,16 +39,15 @@ func ListLockers(d Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		rows, err := d.DB.Query(c.Context(),
 			`SELECT l.locker_id, l.owner, ll.name
-			   FROM locker_info l
-			   JOIN locker_locations ll ON ll.location_id = l.location_id
-			   ORDER BY l.locker_id`)
+               FROM locker_info l
+               JOIN locker_locations ll ON ll.location_id = l.location_id
+               ORDER BY l.locker_id`)
 		if err != nil {
 			return fiber.ErrInternalServerError
 		}
 		defer rows.Close()
 
 		var out []LockerResponse
-
 		for rows.Next() {
 			var it LockerResponse
 			if err := rows.Scan(&it.LockerID, &it.Owner, &it.LocationID); err != nil {
