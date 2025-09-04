@@ -18,6 +18,16 @@
     - docker ps -a
     - docker compose ps
     - docker info
+  - postgresql 컨테이너 접속
+    - docker exec -it locker-server-pg-1 psql -U locker -d locker
+      - # locker_assignments 초기화
+      - TRUNCATE locker_assignments RESTART IDENTITY;
+      - # locker_info 초기화
+      - UPDATE locker_info SET owner = NULL;
+      - # 확인
+      - SELECT * FROM locker_assignments;
+      - SELECT * FROM locker_info;
+    - docker exec -it locker-server-redis-1 redis-cli
 - 서버 닫을 때는 컨트롤 + z
   - failed to listen: listen tcp4 :3000: bind: address already in use 인 경우
     - lsof -i :3000
@@ -25,6 +35,33 @@
 - swag 명령어가 안될 경우
   - export PATH=$PATH:$(go env GOPATH)/bin 
   - 환경 변수 설정 필요
+
+# test data setting
+- student
+  - {"student_id":"20231234","name":"홍길동","phone_number":"01012345678"}
+  - {"student_id":"20231235","name":"김철수","phone_number":"01087654321"}
+- curl test flow
+  1. 로그인
+    ``` bash
+    curl -X POST http://localhost:3000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"student_id":"20231234","name":"홍길동","phone_number":"01012345678"}'
+    ```
+  2. 사물함 선점
+    ``` bash
+    curl -X POST http://localhost:3000/api/v1/lockers/101/hold \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+    ```
+  3. 사물함 확정
+    ``` bash
+    curl -X POST http://localhost:3000/api/v1/lockers/101/confirm \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+    ```
+  4. 사물함 목록 조회
+  ``` bash
+  curl -X GET http://localhost:3000/api/v1/lockers \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+  ```
 
 ## 필요한 구현 사항
 1. 학번, 이름, 전화번호로 로그인
@@ -55,7 +92,7 @@ Enum assignment_state {
 
 /* ===== USERS ===== */
 Table users {
-  student_id      int           [pk, not null, note: '학번 (PK)']
+  student_id      varchar(20)           [pk, not null, note: '학번 (PK)']
   name            varchar(100)  [not null]
   phone_number    varchar(32)   [not null, unique, note: '중복 가입 방지']
   // is_admin      boolean       [not null, default: false] // 필요 시 활성화
@@ -82,6 +119,14 @@ Ref: auth_refresh_tokens.student_id > users.student_id
 /* ===== LOCATIONS (코드값 테이블화) ===== */
 Table locker_locations {
   location_id     serial        [pk]
+  /* 
+  정보관 지하 1층 - 엘리베이터: 1 
+  정보관 지하 1층 - 기계실: 2 
+  정보관 2층: 3 
+  정보관 3층: 4 
+  과학도서관 6층 - 왼쪽: 5 
+  과학도서관 6층 - 오른쪽: 6 
+  */
   name            text          [not null, unique, note: '예: 정보관 B1 엘리베이터, 정보관 B1 기계실, 정보관 2층, ...']
 }
 
@@ -151,67 +196,3 @@ Ref: locker_assignments.locker_id  > locker_info.locker_id
 ```
 ## 프론트 화면
 ![alt text](/locker-server/image.png)
-
-## project 디렉토리 구조
-``` text
-locker-server/
-├─ cmd/                                   # 여러 실행 바이너리의 엔트리포인트 모음 (CLI, server 등)
-│  └─ server/
-│     └─ main.go                          # 서버 시작점: Fiber 부트, 미들웨어 장착, 라우터 등록, Listen
-│
-├─ internal/                              # 외부에서 import 불가(Go의 internal 규칙) — 앱의 내부 구현
-│  ├─ api/                                # HTTP 레이어(라우터/핸들러/미들웨어/DTO)
-│  │  ├─ router.go                        # 라우트 트리 구성: /api, /v1 그룹핑 및 핸들러 바인딩
-│  │  ├─ middleware/                      # 요청 전/후 공통 처리 (auth, logger 확장, rate limit 등)
-│  │  │  ├─ auth.go                       # JWT 검증, 권한 체크, RequestID 등
-│  │  │  └─ recover.go                    # panic 복구(필요 시 커스터마이즈)
-│  │  ├─ handlers/                        # 실제 엔드포인트 로직 (HTTP 입출력에 집중)
-│  │  │  ├─ auth.go                       # 로그인, 토큰 재발급/무효화
-│  │  │  └─ locker.go                     # 사물함 조회/선점(Hold)/확정(Confirm)/해제(Release)
-│  │  └─ dto/                             # 요청/응답 바디 스키마(입력 검증, 응답 포맷 정의)
-│  │     ├─ auth_dto.go                   # 로그인/리프레시 DTO
-│  │     └─ locker_dto.go                 # 사물함 관련 DTO
-│  │
-│  ├─ service/                            # 유스케이스 계층: 비즈니스 플로우 오케스트레이션
-│  │  ├─ auth_service.go                  # 로그인→토큰 발급, 리프레시 검증 로직
-│  │  └─ locker_service.go                # Redis 홀드→DB 기록→확정 트랜잭션 등 핵심 시나리오
-│  │
-│  ├─ domain/                             # 도메인 모델(엔터티/값객체)과 비즈니스 규칙
-│  │  ├─ users.go                         # User 엔터티, 도메인 규칙/에러
-│  │  └─ lockers.go                       # Locker/Assignment 엔터티, 상태 전이 규칙
-│  │
-│  ├─ repository/                         # DB 접근 계층(쿼리/트랜잭션) — pgx, SQL 빌더, 캐시 등
-│  │  ├─ user_repo.go                     # users SELECT/INSERT/UPDATE 등
-│  │  ├─ locker_repo.go                   # locker_info/locations CRUD
-│  │  └─ assignment_repo.go               # locker_assignments 히스토리/유니크 제약 충돌 처리
-│  │
-│  ├─ db/                                 # 인프라(DB) 연결/마이그레이션 관련
-│  │  ├─ postgres.go                      # pgxpool 초기화, 헬스체크, 연결 파라미터 설정
-│  │  └─ migrate/                         # SQL 마이그레이션 파일들(버전 관리)
-│  │     └─ 0001_init.sql                 # 초기 스키마: 테이블/인덱스/enum 생성
-│  │
-│  ├─ cache/                              # Redis 등 캐시/분산락/레이트리밋 스토리지
-│  │  └─ redis.go                         # Redis 클라이언트 초기화(SetNX, TTL, Lua 등 유틸)
-│  │
-│  └─ util/                               # 범용 유틸(순수 로직): JWT, 해시, 응답 헬퍼, 시간/문자열 등
-│     ├─ jwt.go                           # JWS 기반 Access 토큰 발급/검증
-│     ├─ hash.go                          # 해시/난수 토큰 생성(Refresh 해시용)
-│     └─ response.go                      # 공통 응답 포맷/에러 변환
-│
-├─ configs/                               # 설정 파일(.env 샘플, YAML/JSON 설정 등)
-│  └─ config.example.env                  # 환경변수 예시(포트, DB_URL, JWT 시크릿/TTL 등)
-│
-├─ scripts/                               # 개발/운영 스크립트(로컬 부트스트랩, 데이터 시드, 린트 등)
-│  ├─ dev_up.sh                           # 로컬 개발용 부트스트랩 스크립트
-│  └─ seed.sql                            # 샘플 데이터 insert (선택)
-│
-├─ test/                                  # 통합/엔드투엔드 테스트, 테스트 픽스처
-│  └─ e2e/                                # http 테스트, 시나리오별 케이스
-│
-├─ docker-compose.yml                     # 로컬 infra(Postgres/Redis) 기동
-├─ Makefile                               # 자주 쓰는 명령어 단축(run, migrate, test 등)
-├─ go.mod                                 # Go 모듈 정의
-├─ go.sum                                 # 의존성 해시
-├─ .gitignore                             # 바이너리/캐시/환경파일 무시
-└─ README.md                              # 프로젝트 개요, 실행 방법, API 문서 링크
-```
