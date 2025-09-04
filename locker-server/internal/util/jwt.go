@@ -47,7 +47,12 @@ func IssueAccessToken(studentID string) (string, error) {
 	secret := []byte(os.Getenv("JWT_ACCESS_SECRET")) // 절대 유출 금지
 	iss := os.Getenv("JWT_ISS")                      // 발급자
 	aud := os.Getenv("JWT_AUD")                      // 대상
-	ttlMin := EnvInt("JWT_ACCESS_TTL_MIN", 10)       // 만료(분)
+
+	// 환경변수 검증
+	if secret == nil || iss == "" || aud == "" {
+		return "", fmt.Errorf("missing required environment variables for JWT")
+	}
+	ttlMin := EnvInt("JWT_ACCESS_TTL_MIN", 10) // 만료(분)
 
 	now := time.Now()
 
@@ -77,6 +82,7 @@ func EnvInt(key string, def int) int {
 	}
 	var x int
 	if _, err := fmt.Sscan(v, &x); err != nil || x <= 0 {
+		fmt.Printf("Invalid or missing environment variable %s, using default value %d\n", key, def)
 		return def
 	}
 	return x

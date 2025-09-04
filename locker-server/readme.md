@@ -1,11 +1,3 @@
-# TODO
-1. swagger docs 제작 [done 250902]
-2. docker로 서버 띄어서 테스트 [done 250902]
-3. api test
-  - docker에 db 띄우기
-4. api 수정
-
-
 # 고려대학교 정보대학 제9대 학생회 사물함 서버 개발
 - 기술 스택: Go + Fiber + postgresql
 

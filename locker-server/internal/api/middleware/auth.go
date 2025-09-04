@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"log"
 	"os"
 	"strings"
 
@@ -17,6 +18,11 @@ func JWTAuth() fiber.Handler {
 	secret := []byte(os.Getenv("JWT_ACCESS_SECRET"))
 	iss := os.Getenv("JWT_ISS")
 	aud := os.Getenv("JWT_AUD")
+
+	// 환경변수 검증
+	if secret == nil || iss == "" || aud == "" {
+		log.Fatal("JWT environment variables are not set properly")
+	}
 
 	return func(c *fiber.Ctx) error {
 		// HTTP Authorization 헤더에서 Bearer 토큰 추출
@@ -38,7 +44,12 @@ func JWTAuth() fiber.Handler {
 			}
 			return secret, nil
 		}, jwt.WithIssuer(iss), jwt.WithAudience(aud))
-		if err != nil || !token.Valid {
+		if err != nil {
+			log.Print("Failed to parse JWT token")
+			return fiber.ErrUnauthorized
+		}
+		if !token.Valid {
+			log.Print("Invalid JWT token")
 			return fiber.ErrUnauthorized
 		}
 
@@ -51,6 +62,7 @@ func JWTAuth() fiber.Handler {
 		// sub(주체) = 학번. 핸들러에서 c.Locals("student_id")로 꺼내씀.
 		sub, _ := claims["sub"].(string)
 		if sub == "" {
+			log.Print("Missing student_id claim")
 			return fiber.ErrUnauthorized
 		}
 		c.Locals("student_id", sub)

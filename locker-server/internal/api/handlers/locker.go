@@ -18,9 +18,10 @@ import (
 
 // Locker Response
 type LockerResponse struct {
-	LockerID   int     `json:"locker_id"`
-	LocationID string  `json:"location_id"`
-	Owner      *string `json:"owner,omitempty"` // null 가능
+	LockerID       int     `json:"locker_id"`
+	LocationID     string  `json:"location_id"`
+	Owner          *string `json:"owner,omitempty"` // null 가능
+	RemainingCount int     `json:"remaining_count"` // 사용 가능한 사물함 수
 }
 
 // ListLockers: 사물함 목록 조회
@@ -35,10 +36,28 @@ type LockerResponse struct {
 // @Success      200 {array} LockerResponse
 // @Failure      401 {object} ErrorResponse
 // @Router       /lockers [get]
+// 응답 json 예시
+/*
+	{
+		"lockers": [
+			{
+			"locker_id": 101,
+			"owner": "20231234",
+			"location_id": "정보관 B1 엘리베이터"
+			},
+			{
+			"locker_id": 102,
+			"owner": null,
+			"location_id": "정보관 B1 엘리베이터"
+			}
+		],
+		"available_count": 12
+	}
+*/
 func ListLockers(d Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		rows, err := d.DB.Query(c.Context(),
-			`SELECT l.locker_id, l.owner, ll.name
+			`SELECT l.locker_id, l.owner, ll.name,
                FROM locker_info l
                JOIN locker_locations ll ON ll.location_id = l.location_id
                ORDER BY l.locker_id`)
@@ -55,7 +74,18 @@ func ListLockers(d Deps) fiber.Handler {
 			}
 			out = append(out, it)
 		}
-		return c.JSON(out)
+
+		// 단일 응답에 사용 가능한 사물함 수 포함
+		var availableCount int
+		err = d.DB.QueryRow(c.Context(),
+			`SELECT COUNT(*) FROM locker_info WHERE owner IS NULL`).Scan(&availableCount)
+		if err != nil {
+			return fiber.ErrInternalServerError
+		}
+		return c.JSON(fiber.Map{
+			"lockers":         out,
+			"available_count": availableCount,
+		})
 	}
 }
 
@@ -100,19 +130,19 @@ func HoldLocker(d Deps) fiber.Handler {
 		}
 		if !ok {
 			// 이미 다른 사람이 hold했거나, 본인이 선점했을 수도 있음 → 409
-			return fiber.NewError(fiber.StatusConflict, "already held")
+			return fiber.NewError(fiber.StatusConflict, "Locker already held by someone")
 		}
 
 		// DB 히스토리 기록 (hold)
 		// * 유니크 인덱스가 마지막 안전망(한 locker/한 user당 활성 1건)
 		_, err = d.DB.Exec(c.Context(),
 			`INSERT INTO locker_assignments(locker_id, student_id, state, hold_expires_at)
-			 VALUES ($1,$2,'hold', now() + interval '2 minutes')`,
+			 VALUES ($1,$2,'hold', now() + interval '5 minutes')`,
 			id, student)
 		if err != nil {
-			// DB에서 막히면 Redis 키를 지우는 게 깔끔(베스트 에포트)
+			// DB에서 막히면 Redis 키를 삭제(베스트 에포트)
 			_, _ = d.RDB.Del(c.Context(), key).Result()
-			return fiber.NewError(fiber.StatusConflict, "conflict")
+			return fiber.NewError(fiber.StatusConflict, "Locker hold failed on DB. Deleting Redis key.")
 		}
 
 		// 성공 → 201
@@ -168,7 +198,7 @@ func ConfirmLocker(d Deps) fiber.Handler {
 
 		// 2) locker_info.owner를 내 학번으로 설정
 		ct2, err := tx.Exec(c.Context(),
-			`UPDATE locker_info SET owner=$1 WHERE locker_id=$2`, student, id)
+			`UPDATE locker_info SET owner=$1 WHERE locker_id=$2 AND owner IS NULL`, student, id)
 		if err != nil || ct2.RowsAffected() == 0 {
 			// 소유자 업데이트 실패 → 충돌 처리
 			return fiber.ErrConflict
@@ -242,7 +272,7 @@ func ReleaseLocker(d Deps) fiber.Handler {
 		// (옵션) 혹시 남아있을지 모르는 hold 키 제거(베스트 에포트)
 		_, _ = d.RDB.Del(c.Context(), "locker:hold:"+strconv.Itoa(id)).Result()
 
-		return c.SendStatus(fiber.StatusNoContent)
+		return c.JSON(fiber.Map{"message": "locker released successfully"})
 	}
 }
 

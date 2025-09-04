@@ -3,6 +3,7 @@ package handlers
 import (
 	"crypto/sha256"
 	"encoding/base64"
+	"log"
 	"net"
 	"time"
 
@@ -63,13 +64,9 @@ func Login(d Deps) fiber.Handler {
 			// JSON 파싱 실패 → 400
 			return fiber.ErrBadRequest
 		}
-		if req.Name == "" || req.Phone == "" {
-			return fiber.NewError(fiber.StatusBadRequest, "missing fields")
-		}
-
 		// 아주 기초적인 유효성 검사(필드 비었는지 등)
 		if req.StudentID == "" || req.Name == "" || req.Phone == "" {
-			return fiber.NewError(fiber.StatusBadRequest, "missing fields")
+			return fiber.NewError(fiber.StatusBadRequest, "missing required fields: student_id, name, phone_number")
 		}
 
 		// 2) DB에서 존재 여부 확인
@@ -113,7 +110,9 @@ func Login(d Deps) fiber.Handler {
 		// DB에 저장(평문 refresh는 절대 저장 X)
 		_, err = d.DB.Exec(c.Context(),
 			`INSERT INTO auth_refresh_tokens(student_id, token_hash, expires_at, user_agent, ip)
-			 VALUES ($1,$2,$3,$4,$5)`,
+             VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT (student_id, token_hash) DO NOTHING
+			 SET token_hash = EXCLUDED.token_hash, expires_at = EXCLUDED.expires_at, user_agent = EXCLUDED.user_agent, ip = EXCLUDED.ip`,
 			req.StudentID, hashB64, expires, ua, ip,
 		)
 		if err != nil {
@@ -122,9 +121,9 @@ func Login(d Deps) fiber.Handler {
 
 		// 5) 클라이언트에 반환
 		// 주의: refresh 토큰은 이번 한 번만 평문으로 내려보냄(클라이언트가 보관)
-		return c.JSON(fiber.Map{
-			"access_token":  access,
-			"refresh_token": refreshPlain,
+		return c.JSON(LoginResponse{
+			AccessToken:  access,
+			RefreshToken: refreshPlain,
 		})
 	}
 }
@@ -144,18 +143,16 @@ func Login(d Deps) fiber.Handler {
 func Refresh(d Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		// 1) 요청 바디(JSON) 파싱
-		var req struct {
-			Refresh string `json:"refresh_token"`
-		}
+		var req RefreshRequest
 		if err := c.BodyParser(&req); err != nil {
-			return fiber.ErrBadRequest
+			return fiber.NewError(fiber.StatusBadRequest, "invalid request payload")
 		}
-		if req.Refresh == "" {
+		if req.RefreshToken == "" {
 			return fiber.NewError(fiber.StatusBadRequest, "missing refresh_token")
 		}
 
 		// 2) 평문 refresh → SHA256 → base64url
-		hash := sha256.Sum256([]byte(req.Refresh))
+		hash := sha256.Sum256([]byte(req.RefreshToken))
 		hashB64 := base64.RawURLEncoding.EncodeToString(hash[:])
 
 		// 3) DB에서 유효한 리프레시인지 확인 (만료/회수 여부)
@@ -170,8 +167,20 @@ func Refresh(d Deps) fiber.Handler {
 		if err != nil {
 			// 토큰이 없거나 만료/회수된 경우
 			if err == pgx.ErrNoRows {
-				return fiber.ErrUnauthorized
+				return fiber.ErrUnauthorized // 보안상 구체적인 에러 메시지는 반환하지 않음.
 			}
+			return fiber.ErrInternalServerError
+		}
+
+		// 보안적 측면에서 Refresh 토큰은 1회용으로 설계하는 것이 좋음.
+		// 즉, Refresh 시 기존 토큰은 회수(revoke)하고 새 토큰을 발급.
+		_, err = d.DB.Exec(c.Context(),
+			`UPDATE auth_refresh_tokens
+			 SET revoked_at = now(), updated_at = now()
+			 WHERE token_hash = $1`,
+			hashB64,
+		)
+		if err != nil {
 			return fiber.ErrInternalServerError
 		}
 
@@ -192,7 +201,8 @@ func Refresh(d Deps) fiber.Handler {
 func clientIP(c *fiber.Ctx) string {
 	ip := c.IP()
 	if net.ParseIP(ip) == nil {
-		return ""
+		log.Printf("Invalid IP address: %s", ip)
+		return "0.0.0.0"
 	}
 	return ip
 }
