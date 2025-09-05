@@ -73,7 +73,8 @@
   ``` bash
     curl -X POST http://localhost:3000/api/v1/auth/refresh \
   -H "Content-Type: application/json" \
-  -d '{"refresh_token":"YOUR_REFRESH_TOKEN"}'
+  -H "Authorization: Bearer ACCESS_TOKEN" \
+  -d '{"refresh_token":"REFRESH_TOKEN"}'
   ```
   8. health check
   ``` bash

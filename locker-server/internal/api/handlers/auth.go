@@ -150,6 +150,13 @@ func Refresh(d Deps) fiber.Handler {
 			return fiber.NewError(fiber.StatusBadRequest, "missing refresh_token")
 		}
 
+		// 1.5) Authorization 헤더에서 현재 access token 추출 (블랙리스트용)
+		var currentAccessToken string
+		authHeader := c.Get("Authorization")
+		if authHeader != "" && len(authHeader) > 7 && authHeader[:7] == "Bearer " {
+			currentAccessToken = authHeader[7:]
+		}
+
 		// 2) 평문 refresh → SHA256 → base64url
 		hash := sha256.Sum256([]byte(req.RefreshToken))
 		hashB64 := base64.RawURLEncoding.EncodeToString(hash[:])
@@ -183,12 +190,52 @@ func Refresh(d Deps) fiber.Handler {
 			return fiber.ErrInternalServerError
 		}
 
+		// 3.5) 이전 access token을 블랙리스트에 추가 (있다면)
+		if currentAccessToken != "" {
+			if jti, err := util.ExtractJTI(currentAccessToken); err == nil {
+				// Redis에 JTI를 블랙리스트로 저장 (TTL은 access token의 만료 시간까지)
+				ttlMin := util.EnvInt("JWT_ACCESS_TTL_MIN", 10)
+				blacklistKey := "blacklist:" + jti
+				_, _ = d.RDB.Set(c.Context(), blacklistKey, "revoked", time.Duration(ttlMin)*time.Minute).Result()
+				log.Printf("Added access token to blacklist: %s", jti)
+			}
+		}
+
 		// 4) 새 Access 발급
 		token, err := util.IssueAccessToken(sid)
 		if err != nil {
 			return fiber.ErrInternalServerError
 		}
-		return c.JSON(fiber.Map{"access_token": token})
+
+		// 5) 새 Refresh 토큰 발급 (1회용이므로 새로 발급)
+		refreshPlain := util.RandomToken(32)           // 안전한 랜덤 바이트 → base64
+		newHash := sha256.Sum256([]byte(refreshPlain)) // SHA-256 해시(더 강한 KDF도 가능)
+		newHashB64 := base64.RawURLEncoding.EncodeToString(newHash[:])
+
+		// user agent / ip는 감사성(어디서 발급됐는지 추적)
+		ua := string(c.Request().Header.UserAgent())
+		ip := clientIP(c)
+
+		// 만료 시각: 환경변수에서 시간(시간 단위)로 읽어와 now() + TTL
+		expires := time.Now().Add(time.Hour * time.Duration(util.EnvInt("JWT_REFRESH_TTL_H", 336)))
+
+		// 새 refresh token을 DB에 저장
+		_, err = d.DB.Exec(c.Context(),
+			`INSERT INTO auth_refresh_tokens(student_id, token_hash, expires_at, user_agent, ip)
+     		 VALUES ($1, $2, $3, $4, $5)
+     		 ON CONFLICT (token_hash) DO NOTHING`,
+			sid, newHashB64, expires, ua, ip,
+		)
+		if err != nil {
+			log.Printf("Refresh: failed to store new refresh token: %v", err)
+			return fiber.ErrInternalServerError
+		}
+
+		// 6) 클라이언트에 반환
+		return c.JSON(RefreshResponse{
+			AccessToken:  token,
+			RefreshToken: refreshPlain,
+		})
 	}
 }
 

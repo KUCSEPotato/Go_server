@@ -27,7 +27,12 @@ func Setup(app *fiber.App, deps handlers.Deps) {
 
 	// --- 아래부터는 JWT가 있어야 접근 가능한 보호 API ---
 	// 빈 prefix("")에 JWT 미들웨어를 덧씌워서 같은 그룹 안 라우트에 공통적용
-	authed := v1.Group("", middleware.JWTAuth())
+	// 미들웨어에서 블랙리스트 체크를 위해 deps 전달
+	middlewareDeps := middleware.Deps{
+		DB:  deps.DB,
+		RDB: deps.RDB,
+	}
+	authed := v1.Group("", middleware.JWTAuth(middlewareDeps))
 
 	authed.Get("/lockers", handlers.ListLockers(deps))                // 사물함 목록 조회
 	authed.Get("/lockers/me", handlers.GetMyLocker(deps))             // <-- 추가

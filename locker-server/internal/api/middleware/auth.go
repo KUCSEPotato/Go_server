@@ -5,15 +5,25 @@ import (
 	"os"
 	"strings"
 
+	"github.com/KUCSEPotato/locker-server/internal/util"
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 )
+
+// Deps: 미들웨어에서 사용할 의존성
+type Deps struct {
+	DB  *pgxpool.Pool
+	RDB *redis.Client
+}
 
 // JWTAuth 는 보호된 라우트에서 사용되는 미들웨어로,
 // 1) Authorization 헤더에 Bearer 토큰이 있는지 확인
 // 2) 토큰 서명/클레임(iss, aud, exp 등) 검증
-// 3) sub(학번)를 c.Locals("student_id")에 저장해 핸들러에서 사용 가능하게 함
-func JWTAuth() fiber.Handler {
+// 3) 블랙리스트 체크
+// 4) sub(학번)를 c.Locals("student_id")에 저장해 핸들러에서 사용 가능하게 함
+func JWTAuth(d Deps) fiber.Handler {
 	// 환경변수로부터 검증에 필요한 값 로드
 	secret := []byte(os.Getenv("JWT_ACCESS_SECRET"))
 	iss := os.Getenv("JWT_ISS")
@@ -33,6 +43,15 @@ func JWTAuth() fiber.Handler {
 			return fiber.ErrUnauthorized
 		}
 		tokenStr := strings.TrimPrefix(authz, "Bearer ")
+
+		// 블랙리스트 체크 (먼저 체크해서 불필요한 파싱 방지)
+		if jti, err := util.ExtractJTI(tokenStr); err == nil {
+			blacklistKey := "blacklist:" + jti
+			if exists, _ := d.RDB.Exists(c.Context(), blacklistKey).Result(); exists > 0 {
+				log.Printf("Token is blacklisted: %s", jti)
+				return fiber.ErrUnauthorized
+			}
+		}
 
 		// jwt.Parse: 토큰 구조/서명/표준 클레임을 검증.
 		// - keyfunc: 어떤 키로 서명했는지를 서버가 결정 (여기서는 HS256 + secret)

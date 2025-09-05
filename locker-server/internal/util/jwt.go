@@ -63,6 +63,7 @@ func IssueAccessToken(studentID string) (string, error) {
 		"aud": aud,                                                 // 누구에게 유효
 		"iat": now.Unix(),                                          // 발급 시각
 		"exp": now.Add(time.Duration(ttlMin) * time.Minute).Unix(), // 만료 시각
+		"jti": RandomToken(16),                                     // JWT ID (블랙리스트용)
 	}
 
 	// 헤더의 alg는 HS256, typ는 JWT
@@ -93,6 +94,27 @@ func RandomToken(length int) string {
 	bytes := make([]byte, length)
 	rand.Read(bytes)
 	return base64.RawURLEncoding.EncodeToString(bytes)
+}
+
+// ExtractJTI: JWT 토큰에서 JTI(JWT ID)를 추출
+func ExtractJTI(tokenStr string) (string, error) {
+	// 토큰 파싱 (서명 검증 없이)
+	token, _, err := new(jwt.Parser).ParseUnverified(tokenStr, jwt.MapClaims{})
+	if err != nil {
+		return "", err
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return "", fmt.Errorf("invalid claims")
+	}
+
+	jti, exists := claims["jti"].(string)
+	if !exists {
+		return "", fmt.Errorf("jti not found")
+	}
+
+	return jti, nil
 }
 
 /*
