@@ -28,24 +28,6 @@ type LockerResponse struct {
 // @Success      200 {array} LockerResponse
 // @Failure      401 {object} ErrorResponse
 // @Router       /lockers [get]
-// 응답 json 예시
-/*
-	{
-		"lockers": [
-			{
-			"locker_id": 101,
-			"owner": "20231234",
-			"location_id": "정보관 B1 엘리베이터"
-			},
-			{
-			"locker_id": 102,
-			"owner": null,
-			"location_id": "정보관 B1 엘리베이터"
-			}
-		],
-		"available_count": 12
-	}
-*/
 func ListLockers(d Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		rows, err := d.DB.Query(c.Context(),
@@ -269,7 +251,17 @@ func ReleaseLocker(d Deps) fiber.Handler {
 }
 
 // GetMyLocker: 현재 로그인한 유저가 소유한 사물함 조회
-// 성공: 200 { "locker": { locker_id, location_id, owner } } 또는 { "locker": null }
+// GetMyLocker godoc
+// @Summary      내 사물함 조회
+// @Description  현재 로그인한 사용자가 소유한 사물함 정보를 반환합니다
+// @Tags         lockers
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200 {object} map[string]interface{} "locker 정보 또는 null"
+// @Failure      401 {object} ErrorResponse
+// @Failure      500 {object} ErrorResponse
+// @Router       /me/locker [get]
 func GetMyLocker(d Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		student, _ := c.Locals("student_id").(string)

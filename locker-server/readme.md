@@ -1,6 +1,30 @@
 # 고려대학교 정보대학 제9대 학생회 사물함 서버 개발
 - 기술 스택: Go + Fiber + postgresql
 
+# 실행 방법
+1. git clone
+``` bash
+git clone https://github.com/KUCSEPotato/Go_server.git
+```
+2. dir 이동
+``` bash
+cd locker-server
+```
+3. 서버 실행
+``` bash
+go run ./cmd/server/main.go
+```
+4. swagger 문서 확인
+``` bash
+http://localhost:3000/swagger/index.html
+```
+5. 서버 닫기
+- ctrl + c
+- ctrl + c가 안될 경우 -> ctrl + z
+  - failed to listen: listen tcp4 :3000: bind: address already in use 인 경우
+    - lsof -i :3000
+    - kill -9 "pid"
+
 # 구현 사항
 - docker
   - docker 띄우기
@@ -20,7 +44,7 @@
       - SELECT * FROM locker_assignments;
       - SELECT * FROM locker_info;
     - docker exec -it locker-server-redis-1 redis-cli
-- 서버 닫을 때는 컨트롤 + z || 컴트롤 + c (컨트롤 + z 사용시 아래의 명령어 사용 필요)
+- 서버 닫을 때는 컨트롤 + z || 컨트롤 + c (컨트롤 + z 사용시 아래의 명령어 사용 필요)
   - failed to listen: listen tcp4 :3000: bind: address already in use 인 경우
     - lsof -i :3000
     - kill -9 "pid"

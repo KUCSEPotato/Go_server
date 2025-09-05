@@ -1,13 +1,29 @@
-# TODO
-1. swagger docs 제작 [done 250902]
-2. docker로 서버 띄어서 테스트 [done 250902]
-3. api test
-  - docker에 db 띄우기
-4. api 수정
-
-
 # 고려대학교 정보대학 제9대 학생회 사물함 서버 개발
 - 기술 스택: Go + Fiber + postgresql
+
+# 실행 방법
+1. git clone
+``` bash
+git clone https://github.com/KUCSEPotato/Go_server.git
+```
+2. dir 이동
+``` bash
+cd locker-server
+```
+3. 서버 실행
+``` bash
+go run ./cmd/server/main.go
+```
+4. swagger 문서 확인
+``` bash
+http://localhost:3000/swagger/index.html
+```
+5. 서버 닫기
+- ctrl + c
+- ctrl + c가 안될 경우 -> ctrl + z
+  - failed to listen: listen tcp4 :3000: bind: address already in use 인 경우
+    - lsof -i :3000
+    - kill -9 "pid"
 
 # 구현 사항
 - docker
@@ -28,7 +44,7 @@
       - SELECT * FROM locker_assignments;
       - SELECT * FROM locker_info;
     - docker exec -it locker-server-redis-1 redis-cli
-- 서버 닫을 때는 컨트롤 + z
+- 서버 닫을 때는 컨트롤 + z || 컨트롤 + c (컨트롤 + z 사용시 아래의 명령어 사용 필요)
   - failed to listen: listen tcp4 :3000: bind: address already in use 인 경우
     - lsof -i :3000
     - kill -9 "pid"
@@ -47,6 +63,11 @@
   -H "Content-Type: application/json" \
   -d '{"student_id":"20231234","name":"홍길동","phone_number":"01012345678"}'
     ```
+    ``` bash
+    curl -X POST http://localhost:3000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"student_id":"20231235","name":"김철수","phone_number":"01087654321"}'
+    ```
   2. 사물함 선점
     ``` bash
     curl -X POST http://localhost:3000/api/v1/lockers/101/hold \
@@ -60,6 +81,28 @@
   4. 사물함 목록 조회
   ``` bash
   curl -X GET http://localhost:3000/api/v1/lockers \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+  ```
+  5. 사물함 해제
+  ``` bash
+    curl -X POST http://localhost:3000/api/v1/lockers/101/release \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+    ```
+  6. 내 사물함 조회 [250904 여기까지 함]
+  ``` bash
+  curl -X GET http://localhost:3000/api/v1/lockers/me \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+  ```
+  7. jwt token refresh
+  ``` bash
+    curl -X POST http://localhost:3000/api/v1/auth/refresh \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ACCESS_TOKEN" \
+  -d '{"refresh_token":"REFRESH_TOKEN"}'
+  ```
+  8. health check
+  ``` bash
+  curl -X GET http://localhost:3000/api/v1/health \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
   ```
 
