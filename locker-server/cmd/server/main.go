@@ -108,6 +108,13 @@ func main() {
 	<-c // 종료 신호 대기
 	log.Println("Shutting down server...")
 	_ = app.Shutdown()
+	pool.Close() // PostgreSQL 풀 닫기
+	// Redis 클라이언트 닫기
+	if err := rdb.Close(); err != nil {
+		log.Printf("Error closing Redis client: %v", err)
+	}
+
+	log.Println("Server gracefully stopped")
 
 	// HTTP 서버 시작 (예: :3000)
 	// log.Fatal(app.Listen(os.Getenv("APP_ADDR")))

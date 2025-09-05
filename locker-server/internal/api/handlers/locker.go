@@ -1,12 +1,3 @@
-// ListLockers
-// @Summary      사물함 목록 조회
-// @Description  locker_info + locker_locations 조인 결과 반환
-// @Tags         lockers
-// @Security     BearerAuth
-// @Produce      json
-// @Success      200 {array}  struct{LockerID int `json:"locker_id"`; Owner *int `json:"owner,omitempty"`; Location string `json:"location"`}
-// @Failure      401 {object} map[string]any
-// @Router       /lockers [get]
 package handlers
 
 import (
@@ -14,14 +5,15 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/jackc/pgx/v5"
 )
 
 // Locker Response
 type LockerResponse struct {
-	LockerID       int     `json:"locker_id"`
-	LocationID     string  `json:"location_id"`
-	Owner          *string `json:"owner,omitempty"` // null 가능
-	RemainingCount int     `json:"remaining_count"` // 사용 가능한 사물함 수
+	LockerID   int     `json:"locker_id"`
+	LocationID string  `json:"location_id"`
+	Owner      *string `json:"owner,omitempty"` // null 가능
+	// RemainingCount int     `json:"remaining_count"` // 사용 가능한 사물함 수
 }
 
 // ListLockers: 사물함 목록 조회
@@ -57,7 +49,7 @@ type LockerResponse struct {
 func ListLockers(d Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		rows, err := d.DB.Query(c.Context(),
-			`SELECT l.locker_id, l.owner, ll.name,
+			`SELECT l.locker_id, l.owner, ll.name
                FROM locker_info l
                JOIN locker_locations ll ON ll.location_id = l.location_id
                ORDER BY l.locker_id`)
@@ -273,6 +265,35 @@ func ReleaseLocker(d Deps) fiber.Handler {
 		_, _ = d.RDB.Del(c.Context(), "locker:hold:"+strconv.Itoa(id)).Result()
 
 		return c.JSON(fiber.Map{"message": "locker released successfully"})
+	}
+}
+
+// GetMyLocker: 현재 로그인한 유저가 소유한 사물함 조회
+// 성공: 200 { "locker": { locker_id, location_id, owner } } 또는 { "locker": null }
+func GetMyLocker(d Deps) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		student, _ := c.Locals("student_id").(string)
+		if student == "" {
+			return fiber.ErrUnauthorized
+		}
+
+		var it LockerResponse
+		err := d.DB.QueryRow(c.Context(),
+			`SELECT l.locker_id, l.owner, ll.name
+               FROM locker_info l
+               JOIN locker_locations ll ON ll.location_id = l.location_id
+              WHERE l.owner = $1`,
+			student,
+		).Scan(&it.LockerID, &it.Owner, &it.LocationID)
+
+		if err != nil {
+			if err == pgx.ErrNoRows {
+				return c.JSON(fiber.Map{"locker": nil})
+			}
+			return fiber.ErrInternalServerError
+		}
+
+		return c.JSON(fiber.Map{"locker": it})
 	}
 }
 

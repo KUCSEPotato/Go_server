@@ -20,7 +20,7 @@
       - SELECT * FROM locker_assignments;
       - SELECT * FROM locker_info;
     - docker exec -it locker-server-redis-1 redis-cli
-- 서버 닫을 때는 컨트롤 + z
+- 서버 닫을 때는 컨트롤 + z || 컴트롤 + c (컨트롤 + z 사용시 아래의 명령어 사용 필요)
   - failed to listen: listen tcp4 :3000: bind: address already in use 인 경우
     - lsof -i :3000
     - kill -9 "pid"
@@ -39,6 +39,11 @@
   -H "Content-Type: application/json" \
   -d '{"student_id":"20231234","name":"홍길동","phone_number":"01012345678"}'
     ```
+    ``` bash
+    curl -X POST http://localhost:3000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"student_id":"20231235","name":"김철수","phone_number":"01087654321"}'
+    ```
   2. 사물함 선점
     ``` bash
     curl -X POST http://localhost:3000/api/v1/lockers/101/hold \
@@ -52,6 +57,27 @@
   4. 사물함 목록 조회
   ``` bash
   curl -X GET http://localhost:3000/api/v1/lockers \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+  ```
+  5. 사물함 해제
+  ``` bash
+    curl -X POST http://localhost:3000/api/v1/lockers/101/release \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+    ```
+  6. 내 사물함 조회 [250904 여기까지 함]
+  ``` bash
+  curl -X GET http://localhost:3000/api/v1/lockers/me \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+  ```
+  7. jwt token refresh
+  ``` bash
+    curl -X POST http://localhost:3000/api/v1/auth/refresh \
+  -H "Content-Type: application/json" \
+  -d '{"refresh_token":"YOUR_REFRESH_TOKEN"}'
+  ```
+  8. health check
+  ``` bash
+  curl -X GET http://localhost:3000/api/v1/health \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
   ```
 

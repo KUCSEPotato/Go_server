@@ -110,9 +110,8 @@ func Login(d Deps) fiber.Handler {
 		// DB에 저장(평문 refresh는 절대 저장 X)
 		_, err = d.DB.Exec(c.Context(),
 			`INSERT INTO auth_refresh_tokens(student_id, token_hash, expires_at, user_agent, ip)
-             VALUES ($1, $2, $3, $4, $5)
-             ON CONFLICT (student_id, token_hash) DO NOTHING
-			 SET token_hash = EXCLUDED.token_hash, expires_at = EXCLUDED.expires_at, user_agent = EXCLUDED.user_agent, ip = EXCLUDED.ip`,
+     		 VALUES ($1, $2, $3, $4, $5)
+     		 ON CONFLICT (token_hash) DO NOTHING`,
 			req.StudentID, hashB64, expires, ua, ip,
 		)
 		if err != nil {
@@ -176,7 +175,7 @@ func Refresh(d Deps) fiber.Handler {
 		// 즉, Refresh 시 기존 토큰은 회수(revoke)하고 새 토큰을 발급.
 		_, err = d.DB.Exec(c.Context(),
 			`UPDATE auth_refresh_tokens
-			 SET revoked_at = now(), updated_at = now()
+			 SET revoked_at = now()
 			 WHERE token_hash = $1`,
 			hashB64,
 		)
