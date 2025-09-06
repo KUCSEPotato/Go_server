@@ -187,7 +187,37 @@ class TestDataManager:
             await redis.close()
             
         except ImportError:
-            print("   ⚠️ aioredis not installed, skipping Redis cache cleanup")
+            # aioredis가 없으면 도커 명령어로 대체
+            try:
+                import subprocess
+                result = subprocess.run([
+                    'docker', 'exec', 'locker-server-redis-1', 
+                    'redis-cli', 'EVAL', 
+                    'return redis.call("del", unpack(redis.call("keys", "locker:hold:*")))', '0'
+                ], capture_output=True, text=True, timeout=10)
+                
+                if result.returncode == 0:
+                    deleted_count = result.stdout.strip()
+                    if deleted_count and deleted_count.isdigit() and int(deleted_count) > 0:
+                        print(f"   ✅ Cleared {deleted_count} Redis cache entries (via docker)")
+                    else:
+                        print("   ✅ No Redis cache entries to clear (via docker)")
+                else:
+                    # 키가 없으면 에러가 날 수 있으니, FLUSHALL로 완전 정리
+                    result2 = subprocess.run([
+                        'docker', 'exec', 'locker-server-redis-1', 
+                        'redis-cli', 'FLUSHALL'
+                    ], capture_output=True, text=True, timeout=10)
+                    
+                    if result2.returncode == 0:
+                        print("   ✅ Redis cache completely cleared (via docker FLUSHALL)")
+                    else:
+                        print(f"   ⚠️ Failed to clear Redis via docker: {result2.stderr}")
+                        
+            except subprocess.TimeoutExpired:
+                print("   ⚠️ Redis cleanup timeout - continuing without cleanup")
+            except Exception as docker_error:
+                print(f"   ⚠️ Failed to clear Redis cache via docker: {docker_error}")
         except Exception as e:
             print(f"   ⚠️ Failed to clear Redis cache: {e}")
     
@@ -310,7 +340,7 @@ class TestDataManager:
             self.created_lockers = []
     
     async def cleanup_test_data(self):
-        """테스트 데이터 정리 - 임시 사용자 완전 삭제, 원본 사용자는 보호"""
+        """테스트 데이터 정리 - 임시 사용자 완전 삭제, 원본 데이터 복원"""
         if not self.db_pool:
             return
             
@@ -319,147 +349,102 @@ class TestDataManager:
                 async with conn.transaction():
                     print("🔄 Cleaning up test data...")
                     
-                    # 1. 임시 사용자들과 관련된 모든 데이터 삭제
+                    # 1. 모든 현재 데이터 삭제 (깨끗한 상태로 시작)
+                    await conn.execute("DELETE FROM auth_refresh_tokens")
+                    await conn.execute("DELETE FROM locker_assignments")
+                    await conn.execute("UPDATE locker_info SET owner = NULL")
+                    
+                    # 2. 임시 사용자들 삭제
                     if self.created_users:
-                        # 임시 사용자들의 refresh token 삭제
-                        await conn.execute(
-                            "DELETE FROM auth_refresh_tokens WHERE student_id = ANY($1)",
-                            self.created_users
-                        )
-                        
-                        # 임시 사용자들의 사물함 할당 기록 삭제
-                        await conn.execute(
-                            "DELETE FROM locker_assignments WHERE student_id = ANY($1)",
-                            self.created_users
-                        )
-                        
-                        # 임시 사용자들이 소유한 사물함 해제
-                        await conn.execute(
-                            "UPDATE locker_info SET owner = NULL WHERE owner = ANY($1)",
-                            self.created_users
-                        )
-                        
-                        # 임시 사용자들 삭제
                         await conn.execute(
                             "DELETE FROM users WHERE student_id = ANY($1)",
                             self.created_users
                         )
-                        
                         print(f"🗑️ Deleted {len(self.created_users)} temporary users")
                     
-                    # 2. 테스트로 생성된 사물함 삭제
+                    # 3. 테스트로 생성된 사물함 삭제
                     if self.created_lockers:
-                        locker_ids = self.created_lockers
                         await conn.execute(
                             "DELETE FROM locker_info WHERE locker_id = ANY($1)",
-                            locker_ids
+                            self.created_lockers
                         )
-                        print(f"🗑️ Deleted {len(locker_ids)} test lockers")
+                        print(f"🗑️ Deleted {len(self.created_lockers)} test lockers")
                     
-                    # 3. 원본 사용자들의 상태 초기화 (깨끗한 상태로)
-                    await conn.execute(
-                        "DELETE FROM auth_refresh_tokens WHERE student_id IN ('20231234', '20231235')"
-                    )
-                    await conn.execute(
-                        "DELETE FROM locker_assignments WHERE student_id IN ('20231234', '20231235')"
-                    )
-                    await conn.execute(
-                        "UPDATE locker_info SET owner = NULL WHERE owner IN ('20231234', '20231235')"
-                    )
+                    # 4. 원본 데이터 복원
+                    restored_assignments = 0
+                    restored_lockers = 0
+                    restored_tokens = 0
                     
-                    # 4. 모든 사물함의 점유 상태 완전 초기화 (혹시 남아있는 다른 점유 상태도 정리)
-                    all_owned_result = await conn.fetch("SELECT COUNT(*) as count FROM locker_info WHERE owner IS NOT NULL")
-                    owned_count = all_owned_result[0]['count'] if all_owned_result else 0
+                    # 원본 사물함 할당 기록 복원
+                    if self.original_locker_assignments:
+                        for assignment in self.original_locker_assignments:
+                            try:
+                                await conn.execute(
+                                    """INSERT INTO locker_assignments 
+                                       (assignment_id, locker_id, student_id, state, hold_expires_at, confirmed_at, released_at, created_at) 
+                                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)""",
+                                    assignment.get('assignment_id'),
+                                    assignment.get('locker_id'),
+                                    assignment.get('student_id'),
+                                    assignment.get('state'),
+                                    assignment.get('hold_expires_at'),
+                                    assignment.get('confirmed_at'),
+                                    assignment.get('released_at'),
+                                    assignment.get('created_at')
+                                )
+                                restored_assignments += 1
+                            except Exception as e:
+                                print(f"⚠️ Failed to restore assignment {assignment.get('assignment_id')}: {e}")
+                        print(f"✅ Restored {restored_assignments} original locker assignments")
                     
-                    if owned_count > 0:
-                        await conn.execute("UPDATE locker_info SET owner = NULL WHERE owner IS NOT NULL")
-                        print(f"🧹 Released {owned_count} additional occupied lockers")
+                    # 원본 사물함 점유 상태 복원
+                    if self.original_locker_info:
+                        for locker in self.original_locker_info:
+                            try:
+                                await conn.execute(
+                                    "UPDATE locker_info SET owner = $1 WHERE locker_id = $2",
+                                    locker.get('owner'),
+                                    locker.get('locker_id')
+                                )
+                                restored_lockers += 1
+                            except Exception as e:
+                                print(f"⚠️ Failed to restore locker {locker.get('locker_id')}: {e}")
+                        print(f"✅ Restored {restored_lockers} original locker ownerships")
                     
-                    # 5. 모든 사물함 할당 기록 정리 (테스트 중 생성된 할당 기록들)
-                    assignment_result = await conn.fetch("SELECT COUNT(*) as count FROM locker_assignments")
-                    assignment_count = assignment_result[0]['count'] if assignment_result else 0
+                    # 원본 refresh token 복원
+                    if self.original_refresh_tokens:
+                        for token in self.original_refresh_tokens:
+                            try:
+                                await conn.execute(
+                                    """INSERT INTO auth_refresh_tokens 
+                                       (id, student_id, token_hash, issued_at, expires_at, revoked_at, user_agent, ip) 
+                                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)""",
+                                    token.get('id'),
+                                    token.get('student_id'),
+                                    token.get('token_hash'),
+                                    token.get('issued_at'),
+                                    token.get('expires_at'),
+                                    token.get('revoked_at'),
+                                    token.get('user_agent'),
+                                    token.get('ip')
+                                )
+                                restored_tokens += 1
+                            except Exception as e:
+                                print(f"⚠️ Failed to restore token {token.get('id')}: {e}")
+                        print(f"✅ Restored {restored_tokens} original refresh tokens")
                     
-                    if assignment_count > 0:
-                        await conn.execute("DELETE FROM locker_assignments")
-                        print(f"🧹 Cleared {assignment_count} locker assignment records")
-                    
-                    # 6. 모든 refresh token 정리 (테스트 중 생성된 토큰들)
-                    token_result = await conn.fetch("SELECT COUNT(*) as count FROM auth_refresh_tokens")
-                    token_count = token_result[0]['count'] if token_result else 0
-                    
-                    if token_count > 0:
-                        await conn.execute("DELETE FROM auth_refresh_tokens")
-                        print(f"🧹 Cleared {token_count} refresh tokens")
-                    
-                    print("✅ Database restored to original clean state")
-                    print("   - Original users (홍길동, 김철수) preserved")
-                    print("   - All temporary test data removed")
-                    print("   - All locker occupancy states reset")
+                    print("✅ Database restored to original state")
+                    print(f"   - Original users (홍길동, 김철수) preserved")
+                    print(f"   - {restored_assignments} assignment records restored")
+                    print(f"   - {restored_lockers} locker ownerships restored")
+                    print(f"   - {restored_tokens} refresh tokens restored")
+                    print(f"   - All temporary test data removed")
                     
         except Exception as e:
             print(f"❌ Failed to cleanup test data: {e}")
-    
-    async def restore_original_data(self):
-        """원본 데이터베이스 상태로 정확히 복원"""
-        if not self.db_pool:
-            return
             
-        try:
-            async with self.db_pool.acquire() as conn:
-                async with conn.transaction():
-                    print("🔄 Restoring to original database state...")
-                    
-                    # 1. 모든 테스트 데이터 삭제
-                    await conn.execute("DELETE FROM auth_refresh_tokens")
-                    await conn.execute("DELETE FROM locker_assignments")
-                    await conn.execute("UPDATE locker_info SET owner = NULL")
-                    await conn.execute("DELETE FROM users WHERE student_id LIKE 'TEST%'")
-                    await conn.execute("DELETE FROM locker_info WHERE locker_id >= 9000")
-                    
-                    # 2. 원본 사용자 복원
-                    if hasattr(self, 'original_users') and self.original_users:
-                        for user in self.original_users:
-                            await conn.execute(
-                                "INSERT INTO users (student_id, name, phone_number) VALUES ($1, $2, $3) ON CONFLICT (student_id) DO UPDATE SET name = $2, phone_number = $3",
-                                user['student_id'], user['name'], user['phone_number']
-                            )
-                        print(f"✅ Restored {len(self.original_users)} original users")
-                    
-                    # 3. 원본 사물함 점유 상태 복원
-                    if hasattr(self, 'original_locker_info') and self.original_locker_info:
-                        for locker in self.original_locker_info:
-                            await conn.execute(
-                                "UPDATE locker_info SET owner = $1 WHERE locker_id = $2",
-                                locker['owner'], locker['locker_id']
-                            )
-                        print(f"✅ Restored {len(self.original_locker_info)} original locker occupancies")
-                    
-                    # 4. 원본 사물함 할당 기록 복원
-                    if hasattr(self, 'original_locker_assignments') and self.original_locker_assignments:
-                        for assignment in self.original_locker_assignments:
-                            await conn.execute(
-                                "INSERT INTO locker_assignments (student_id, locker_id, assigned_at) VALUES ($1, $2, $3)",
-                                assignment['student_id'], assignment['locker_id'], assignment['assigned_at']
-                            )
-                        print(f"✅ Restored {len(self.original_locker_assignments)} original locker assignments")
-                    
-                    # 5. 원본 refresh token 복원
-                    if hasattr(self, 'original_refresh_tokens') and self.original_refresh_tokens:
-                        for token in self.original_refresh_tokens:
-                            await conn.execute(
-                                "INSERT INTO auth_refresh_tokens (student_id, refresh_token, expires_at) VALUES ($1, $2, $3)",
-                                token['student_id'], token['refresh_token'], token['expires_at']
-                            )
-                        print(f"✅ Restored {len(self.original_refresh_tokens)} original refresh tokens")
-                    
-                    print("🎉 Database restored to exact original state!")
-                    
-        except Exception as e:
-            print(f"❌ Failed to restore original data: {e}")
-        finally:
-            # 생성된 사용자 목록 초기화
-            self.created_users = []
-            self.created_lockers = []
+        # Redis 캐시도 정리
+        await self.clear_redis_cache()
     
     async def close_db(self):
         """DB 연결 종료"""
