@@ -1,0 +1,44 @@
+# Docker ignore file for production builds
+.git
+.gitignore
+README.md
+Dockerfile
+.dockerignore
+docker-compose*.yml
+.env*
+*.md
+
+# Development files
+tests/
+test/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+.venv/
+
+# Test results and logs
+*.log
+load_test_results.json
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Node modules (if any)
+node_modules/
+npm-debug.log
+
+# Temporary files
+*.tmp
+*.temp
