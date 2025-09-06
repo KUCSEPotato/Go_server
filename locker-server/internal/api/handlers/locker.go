@@ -261,7 +261,7 @@ func ReleaseLocker(d Deps) fiber.Handler {
 // @Success      200 {object} map[string]interface{} "locker 정보 또는 null"
 // @Failure      401 {object} ErrorResponse
 // @Failure      500 {object} ErrorResponse
-// @Router       /me/locker [get]
+// @Router       /lockers/me [get]
 func GetMyLocker(d Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		student, _ := c.Locals("student_id").(string)
