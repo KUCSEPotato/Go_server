@@ -12,8 +12,12 @@ func NewRedis() *redis.Client {
 	if addr == "" {
 		addr = "localhost:6379"
 	}
+	
+	password := os.Getenv("REDIS_PASSWORD")
+	
 	return redis.NewClient(&redis.Options{
-		Addr: addr,
-		// Password: "", DB: 0 등도 상황에 따라 지정
+		Addr:     addr,
+		Password: password, // no password set if empty
+		DB:       0,        // use default DB
 	})
 }
