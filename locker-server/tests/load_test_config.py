@@ -4,11 +4,13 @@
 BASE_URL = "http://localhost:3000"
 
 # 데이터베이스 설정 (환경변수로 오버라이드 가능)
-# export DB_HOST=localhost
-# export DB_PORT=5432
-# export DB_NAME=locker
-# export DB_USER=locker
-# export DB_PASSWORD=locker
+import os
+
+DB_HOST = os.getenv("DB_HOST", "localhost")
+DB_PORT = int(os.getenv("DB_PORT", "5432"))
+DB_NAME = os.getenv("DB_NAME", "locker")
+DB_USER = os.getenv("DB_USER", "locker")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "secure_password_2024")
 
 # 부하 테스트 설정 - 대규모 부하 테스트
 TOTAL_USERS = 1000        # 총 가상 사용자 수
