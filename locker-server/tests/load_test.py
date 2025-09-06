@@ -44,7 +44,7 @@ DB_HOST = os.getenv('DB_HOST', 'localhost')
 DB_PORT = os.getenv('DB_PORT', '5432')
 DB_NAME = os.getenv('DB_NAME', 'locker')
 DB_USER = os.getenv('DB_USER', 'locker')
-DB_PASSWORD = os.getenv('DB_PASSWORD', 'locker')
+DB_PASSWORD = os.getenv('DB_PASSWORD', 'secure_password_2024')
 
 @dataclass
 class TestResult:
