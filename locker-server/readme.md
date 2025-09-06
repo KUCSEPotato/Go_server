@@ -40,6 +40,7 @@ http://localhost:3000/swagger/index.html
       - TRUNCATE locker_assignments RESTART IDENTITY;
       - # locker_info 초기화
       - UPDATE locker_info SET owner = NULL;
+      - docker exec -it locker-server-pg-1 psql -U locker -d locker -c "UPDATE locker_info SET owner = NULL; TRUNCATE locker_assignments RESTART IDENTITY;"
       - # 확인
       - SELECT * FROM locker_assignments;
       - SELECT * FROM locker_info;

@@ -187,7 +187,37 @@ class TestDataManager:
             await redis.close()
             
         except ImportError:
-            print("   ⚠️ aioredis not installed, skipping Redis cache cleanup")
+            # aioredis가 없으면 도커 명령어로 대체
+            try:
+                import subprocess
+                result = subprocess.run([
+                    'docker', 'exec', 'locker-server-redis-1', 
+                    'redis-cli', 'EVAL', 
+                    'return redis.call("del", unpack(redis.call("keys", "locker:hold:*")))', '0'
+                ], capture_output=True, text=True, timeout=10)
+                
+                if result.returncode == 0:
+                    deleted_count = result.stdout.strip()
+                    if deleted_count and deleted_count.isdigit() and int(deleted_count) > 0:
+                        print(f"   ✅ Cleared {deleted_count} Redis cache entries (via docker)")
+                    else:
+                        print("   ✅ No Redis cache entries to clear (via docker)")
+                else:
+                    # 키가 없으면 에러가 날 수 있으니, FLUSHALL로 완전 정리
+                    result2 = subprocess.run([
+                        'docker', 'exec', 'locker-server-redis-1', 
+                        'redis-cli', 'FLUSHALL'
+                    ], capture_output=True, text=True, timeout=10)
+                    
+                    if result2.returncode == 0:
+                        print("   ✅ Redis cache completely cleared (via docker FLUSHALL)")
+                    else:
+                        print(f"   ⚠️ Failed to clear Redis via docker: {result2.stderr}")
+                        
+            except subprocess.TimeoutExpired:
+                print("   ⚠️ Redis cleanup timeout - continuing without cleanup")
+            except Exception as docker_error:
+                print(f"   ⚠️ Failed to clear Redis cache via docker: {docker_error}")
         except Exception as e:
             print(f"   ⚠️ Failed to clear Redis cache: {e}")
     
