@@ -43,7 +43,10 @@ services:
     environment:
       - DB_URL=postgres://locker:secure_password_2024@postgres:5432/locker?sslmode=disable
       - REDIS_ADDR=redis:6379
-      - JWT_SECRET=production_jwt_secret_key_2024_very_secure
+      - JWT_ACCESS_SECRET=production_jwt_access_secret_key_2024_very_secure
+      - JWT_ISS=locker-server-prod
+      - JWT_AUD=locker-app-users
+      - JWT_ACCESS_TTL_MIN=10
       - GIN_MODE=release
       - PORT=3000
     ports:
