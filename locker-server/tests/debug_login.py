@@ -104,6 +104,9 @@ async def cleanup_test_user(student_id):
     )
     
     try:
+        # 먼저 관련된 refresh token 삭제
+        await conn.execute("DELETE FROM auth_refresh_tokens WHERE student_id = $1", student_id)
+        # 그 다음 사용자 삭제
         await conn.execute("DELETE FROM users WHERE student_id = $1", student_id)
         print(f"🧹 Cleaned up test user: {student_id}")
     except Exception as e:

@@ -339,6 +339,12 @@ class TestDataManager:
                             self.created_users
                         )
                         
+                        # 임시 사용자들의 refresh token 먼저 삭제
+                        await conn.execute(
+                            "DELETE FROM auth_refresh_tokens WHERE student_id = ANY($1)",
+                            self.created_users
+                        )
+                        
                         # 임시 사용자들 삭제
                         await conn.execute(
                             "DELETE FROM users WHERE student_id = ANY($1)",
