@@ -1,0 +1,52 @@
+services:
+  app:
+    build:
+      context: ..                 # 레포 루트가 컨텍스트
+      dockerfile: docker/Dockerfile
+    container_name: locker-dev-app
+    env_file:
+      - ../configs/.env       # dev용 .env (configs 폴더)
+    ports:
+      - "3000:3000"
+    depends_on:
+      - pg
+      - redis
+    restart: unless-stopped
+
+  pg:
+    image: postgres:16
+    container_name: locker-dev-pg
+    environment:
+      POSTGRES_USER: locker
+      POSTGRES_PASSWORD: locker
+      POSTGRES_DB: locker
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata_dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U locker -d locker"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7
+    container_name: locker-dev-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata_dev:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata_dev:
+  redisdata_dev:
+
+networks:
+  default:
+    name: locker-dev-network
