@@ -6,13 +6,10 @@ services:
       POSTGRES_DB: locker
       POSTGRES_USER: locker
       POSTGRES_PASSWORD: kuci_info_student_council_secure
-    env_file:
-      - ../configs/.env.prod
     ports:
-      - "5433:5432" 
+      - "5433:5432"  # 호스트:컨테이너 (외부에서는 5433으로 접근)
     volumes:
       - postgres_data_prod:/var/lib/postgresql/data
-      - ./internal/db/migrate:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U locker -d locker"]
       interval: 10s
@@ -25,7 +22,7 @@ services:
     container_name: locker-prod-redis
     command: redis-server --appendonly yes
     ports:
-      - "6380:6379"
+      - "6380:6379"  # 호스트:컨테이너 (외부에서는 6380으로 접근)
     volumes:
       - redis_data_prod:/data
     healthcheck:
@@ -37,8 +34,8 @@ services:
 
   app:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: docker/Dockerfile
     container_name: locker-prod-app
     env_file:
       - ../configs/.env.prod
@@ -49,12 +46,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/v1/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
     restart: unless-stopped
 
 volumes:
