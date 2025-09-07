@@ -142,4 +142,26 @@ func VerifyAccessToken(tokenStr string) (jwt.MapClaims, error) {
 
 	return claims, nil
 }
+
+
+// ExtractJTI JWT 토큰에서 JTI(JWT ID)를 추출
+func ExtractJTI(tokenString string) (string, error) {
+	// 토큰 파싱 (검증 없이 클레임만 추출)
+	token, _, err := new(jwt.Parser).ParseUnverified(tokenString, jwt.MapClaims{})
+	if err != nil {
+		return "", err
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return "", fmt.Errorf("invalid token claims")
+	}
+
+	jti, ok := claims["jti"].(string)
+	if !ok {
+		return "", fmt.Errorf("jti not found in token")
+	}
+
+	return jti, nil
+}
 */

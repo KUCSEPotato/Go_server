@@ -27,6 +27,7 @@ import (
 	"github.com/KUCSEPotato/locker-server/internal/api/handlers"
 	"github.com/KUCSEPotato/locker-server/internal/cache"
 	"github.com/KUCSEPotato/locker-server/internal/db"
+	"github.com/KUCSEPotato/locker-server/internal/scheduler"
 
 	// .env 자동 로딩
 	"github.com/joho/godotenv"
@@ -75,6 +76,12 @@ func main() {
 
 	// 의존성 주입용 구조체(핸들러들이 DB/Redis에 접근할 때 사용)
 	deps := handlers.Deps{DB: pool, RDB: rdb}
+
+	// Start real-time cleanup scheduler for expired holds (Redis keyspace notifications)
+	scheduler.StartRealtimeCleanup(pool, rdb)
+
+	// Start background cleanup scheduler as fallback (every 10 seconds)
+	scheduler.StartCleanupScheduler(pool, rdb)
 
 	// Redis connection test
 	log.Printf("Testing Redis connection to: %s", os.Getenv("REDIS_ADDR"))

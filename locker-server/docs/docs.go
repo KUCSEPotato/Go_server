@@ -61,6 +61,97 @@ const docTemplate = `{
                 }
             }
         },
+        "/auth/logout": {
+            "post": {
+                "description": "현재 사용 중인 Access Token과 Refresh Token을 모두 무효화합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "로그아웃",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "default": "Bearer",
+                        "description": "Bearer {access_token}",
+                        "name": "Authorization",
+                        "in": "header"
+                    },
+                    {
+                        "description": "로그아웃 정보 (선택적)",
+                        "name": "payload",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.LogoutRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.LogoutResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/logout-all": {
+            "post": {
+                "description": "현재 사용자의 모든 Refresh Token을 무효화하여 모든 디바이스에서 로그아웃합니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "전체 로그아웃 (모든 디바이스)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "default": "Bearer",
+                        "description": "Bearer {access_token}",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.LogoutResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/auth/refresh": {
             "post": {
                 "description": "Refresh 토큰을 사용하여 새로운 Access 토큰을 발급합니다.",
@@ -107,14 +198,44 @@ const docTemplate = `{
                 }
             }
         },
+        "/health": {
+            "get": {
+                "description": "서버 상태 확인 (DB, Redis 연결 상태 포함)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "health"
+                ],
+                "summary": "헬스 체크",
+                "responses": {
+                    "200": {
+                        "description": "서버가 정상입니다",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "서버에 문제가 있습니다",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/lockers": {
             "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "사용 가능한 사물함 목록을 반환합니다",
+                "description": "모든 사물함 목록과 사용 가능한 사물함 수를 반환합니다",
                 "consumes": [
                     "application/json"
                 ],
@@ -125,18 +246,76 @@ const docTemplate = `{
                     "lockers"
                 ],
                 "summary": "사물함 목록 조회",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "default": "Bearer",
+                        "description": "Bearer {access_token}",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "사물함 목록과 사용 가능 수",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/handlers.LockerResponse"
-                            }
+                            "$ref": "#/definitions/handlers.ListLockersResponse"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "인증 필요",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "서버 오류",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/lockers/me": {
+            "get": {
+                "description": "현재 로그인한 사용자가 소유한 사물함 정보를 반환합니다. 소유한 사물함이 없으면 locker가 null로 반환됩니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "lockers"
+                ],
+                "summary": "내 사물함 조회",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "default": "Bearer",
+                        "description": "Bearer {access_token}",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "내 사물함 정보 (없으면 locker가 null)",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.MyLockerResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "인증 필요 - JWT 토큰이 없거나 유효하지 않음",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "서버 오류 - 데이터베이스 조회 실패",
                         "schema": {
                             "$ref": "#/definitions/handlers.ErrorResponse"
                         }
@@ -146,12 +325,7 @@ const docTemplate = `{
         },
         "/lockers/{id}/confirm": {
             "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "선점한 사물함을 확정합니다.",
+                "description": "선점한 사물함을 확정합니다 (실제 소유권 획득). hold 상태에서 confirmed 상태로 전환되며, 사물함의 소유자로 등록됩니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -164,8 +338,19 @@ const docTemplate = `{
                 "summary": "사물함 확정",
                 "parameters": [
                     {
+                        "type": "string",
+                        "default": "Bearer",
+                        "description": "Bearer {access_token}",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "maximum": 999,
+                        "minimum": 1,
                         "type": "integer",
-                        "description": "사물함 ID",
+                        "example": 101,
+                        "description": "사물함 ID (선점한 사물함)",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -173,19 +358,31 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "확정 완료",
                         "schema": {
-                            "$ref": "#/definitions/handlers.LockerResponse"
+                            "$ref": "#/definitions/handlers.SimpleSuccessResponse"
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "잘못된 요청 - 유효하지 않은 사물함 ID",
                         "schema": {
                             "$ref": "#/definitions/handlers.ErrorResponse"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "인증 필요 - JWT 토큰이 없거나 유효하지 않음",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "선점이 만료되었거나 없음 - hold 상태가 아니거나 5분이 경과함",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "서버 오류 - 데이터베이스 트랜잭션 실패",
                         "schema": {
                             "$ref": "#/definitions/handlers.ErrorResponse"
                         }
@@ -195,12 +392,7 @@ const docTemplate = `{
         },
         "/lockers/{id}/hold": {
             "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "특정 사물함을 선점합니다.",
+                "description": "특정 사물함을 선점합니다 (5분간 예약). Redis와 DB를 통해 동시성 제어를 하며, 성공 시 사물함 정보를 반환합니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -213,28 +405,51 @@ const docTemplate = `{
                 "summary": "사물함 선점",
                 "parameters": [
                     {
+                        "type": "string",
+                        "default": "Bearer",
+                        "description": "Bearer {access_token}",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "maximum": 999,
+                        "minimum": 1,
                         "type": "integer",
-                        "description": "사물함 ID",
+                        "example": 101,
+                        "description": "사물함 ID (1-999 범위)",
                         "name": "id",
                         "in": "path",
                         "required": true
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "OK",
+                    "201": {
+                        "description": "선점 성공 - 사물함 정보 포함",
                         "schema": {
-                            "$ref": "#/definitions/handlers.LockerResponse"
+                            "$ref": "#/definitions/handlers.HoldSuccessResponse"
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "잘못된 요청 - 유효하지 않은 사물함 ID",
                         "schema": {
                             "$ref": "#/definitions/handlers.ErrorResponse"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "인증 필요 - JWT 토큰이 없거나 유효하지 않음",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "이미 선점됨 - 다른 사용자가 이미 선점했거나 본인이 이미 선점한 상태",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "서비스 일시 불가 - Redis 서버 장애",
                         "schema": {
                             "$ref": "#/definitions/handlers.ErrorResponse"
                         }
@@ -244,12 +459,7 @@ const docTemplate = `{
         },
         "/lockers/{id}/release": {
             "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "선점한 사물함을 해제합니다.",
+                "description": "확정된 사물함을 해제합니다 (소유권 포기). confirmed 상태에서 cancelled 상태로 전환되며, 사물함이 다시 사용 가능해집니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -262,8 +472,19 @@ const docTemplate = `{
                 "summary": "사물함 해제",
                 "parameters": [
                     {
+                        "type": "string",
+                        "default": "Bearer",
+                        "description": "Bearer {access_token}",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "maximum": 999,
+                        "minimum": 1,
                         "type": "integer",
-                        "description": "사물함 ID",
+                        "example": 101,
+                        "description": "사물함 ID (소유한 사물함)",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -271,19 +492,31 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "해제 완료",
                         "schema": {
-                            "$ref": "#/definitions/handlers.LockerResponse"
+                            "$ref": "#/definitions/handlers.SimpleSuccessResponse"
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "잘못된 요청 - 유효하지 않은 사물함 ID",
                         "schema": {
                             "$ref": "#/definitions/handlers.ErrorResponse"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "인증 필요 - JWT 토큰이 없거나 유효하지 않음",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "사물함을 찾을 수 없음 - 소유하지 않은 사물함",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "서버 오류 - 데이터베이스 트랜잭션 실패",
                         "schema": {
                             "$ref": "#/definitions/handlers.ErrorResponse"
                         }
@@ -299,6 +532,37 @@ const docTemplate = `{
                 "error": {
                     "type": "string",
                     "example": "invalid credentials"
+                }
+            }
+        },
+        "handlers.HoldSuccessResponse": {
+            "type": "object",
+            "properties": {
+                "expires_in": {
+                    "type": "string",
+                    "example": "5 minutes"
+                },
+                "locker": {
+                    "$ref": "#/definitions/handlers.LockerResponse"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "locker held successfully"
+                }
+            }
+        },
+        "handlers.ListLockersResponse": {
+            "type": "object",
+            "properties": {
+                "available_count": {
+                    "type": "integer",
+                    "example": 45
+                },
+                "lockers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/handlers.LockerResponse"
+                    }
                 }
             }
         },
@@ -342,9 +606,42 @@ const docTemplate = `{
                 }
             }
         },
+        "handlers.LogoutRequest": {
+            "type": "object",
+            "properties": {
+                "access_token": {
+                    "description": "선택적: 요청 body에서 받기",
+                    "type": "string"
+                },
+                "refresh_token": {
+                    "description": "반납할 refresh token",
+                    "type": "string"
+                }
+            }
+        },
+        "handlers.LogoutResponse": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "handlers.MyLockerResponse": {
+            "type": "object",
+            "properties": {
+                "locker": {
+                    "$ref": "#/definitions/handlers.LockerResponse"
+                }
+            }
+        },
         "handlers.RefreshRequest": {
             "type": "object",
             "properties": {
+                "access_token": {
+                    "description": "선택적: 블랙리스트용",
+                    "type": "string"
+                },
                 "refresh_token": {
                     "type": "string"
                 }
@@ -358,6 +655,15 @@ const docTemplate = `{
                 },
                 "refresh_token": {
                     "type": "string"
+                }
+            }
+        },
+        "handlers.SimpleSuccessResponse": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "example": "operation completed successfully"
                 }
             }
         }

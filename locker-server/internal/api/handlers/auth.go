@@ -35,13 +35,23 @@ type LoginResponse struct {
 
 // token
 type RefreshRequest struct {
+	AccessToken  string `json:"access_token"` // 선택적: 블랙리스트용
 	RefreshToken string `json:"refresh_token"`
+}
+
+type LogoutRequest struct {
+	AccessToken  string `json:"access_token"`  // 선택적: 요청 body에서 받기
+	RefreshToken string `json:"refresh_token"` // 반납할 refresh token
 }
 
 // 취약점 주의: hardcoded-credentials Embedding credentials in source code risks unauthorized access
 type RefreshResponse struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
+}
+
+type LogoutResponse struct {
+	Message string `json:"message"`
 }
 
 // Login 핸들러: 학번/이름/폰번호가 users에 존재하면 Access/Refresh 발급
@@ -152,9 +162,15 @@ func Refresh(d Deps) fiber.Handler {
 
 		// 1.5) Authorization 헤더에서 현재 access token 추출 (블랙리스트용)
 		var currentAccessToken string
-		authHeader := c.Get("Authorization")
-		if authHeader != "" && len(authHeader) > 7 && authHeader[:7] == "Bearer " {
-			currentAccessToken = authHeader[7:]
+		if req.AccessToken != "" {
+			// 요청 body에서 직접 받은 access_token 사용
+			currentAccessToken = req.AccessToken
+		} else {
+			// 요청 body에 없으면 Authorization 헤더에서 추출
+			authHeader := c.Get("Authorization")
+			if authHeader != "" && len(authHeader) > 7 && authHeader[:7] == "Bearer " {
+				currentAccessToken = authHeader[7:]
+			}
 		}
 
 		// 2) 평문 refresh → SHA256 → base64url
@@ -251,6 +267,134 @@ func clientIP(c *fiber.Ctx) string {
 		return "0.0.0.0"
 	}
 	return ip
+}
+
+// Logout 핸들러: Access Token과 Refresh Token을 모두 무효화
+// Logout godoc
+// @Summary      로그아웃
+// @Description  현재 사용 중인 Access Token과 Refresh Token을 모두 무효화합니다.
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        Authorization header string false "Bearer {access_token}" default(Bearer )
+// @Param        payload body LogoutRequest false "로그아웃 정보 (선택적)"
+// @Success      200 {object} LogoutResponse
+// @Failure      400 {object} ErrorResponse
+// @Failure      401 {object} ErrorResponse
+// @Router       /auth/logout [post]
+func Logout(d Deps) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		// 1) 요청에서 Access Token과 Refresh Token 추출
+		var req LogoutRequest
+		_ = c.BodyParser(&req) // 에러 무시 (선택적)
+
+		// Access Token 추출 (Authorization 헤더 우선, 없으면 body에서)
+		var accessToken string
+		authHeader := c.Get("Authorization")
+		if authHeader != "" && len(authHeader) > 7 && authHeader[:7] == "Bearer " {
+			accessToken = authHeader[7:]
+		} else if req.AccessToken != "" {
+			accessToken = req.AccessToken
+		}
+
+		// 2) Access Token을 블랙리스트에 추가
+		if accessToken != "" {
+			if jti, err := util.ExtractJTI(accessToken); err == nil {
+				// Redis에 JTI를 블랙리스트로 저장
+				ttlMin := util.EnvInt("JWT_ACCESS_TTL_MIN", 10)
+				blacklistKey := "blacklist:" + jti
+				_, err := d.RDB.Set(c.Context(), blacklistKey, "revoked", time.Duration(ttlMin)*time.Minute).Result()
+				if err != nil {
+					log.Printf("Failed to blacklist access token: %v", err)
+				} else {
+					log.Printf("Access token blacklisted during logout: %s", jti)
+				}
+			}
+		}
+
+		// 3) Refresh Token 무효화 (DB에서 revoke)
+		if req.RefreshToken != "" {
+			// 평문 refresh → SHA256 → base64url
+			hash := sha256.Sum256([]byte(req.RefreshToken))
+			hashB64 := base64.RawURLEncoding.EncodeToString(hash[:])
+
+			// DB에서 해당 refresh token을 revoke
+			result, err := d.DB.Exec(c.Context(),
+				`UPDATE auth_refresh_tokens
+				 SET revoked_at = now()
+				 WHERE token_hash = $1 AND revoked_at IS NULL`,
+				hashB64,
+			)
+			if err != nil {
+				log.Printf("Failed to revoke refresh token: %v", err)
+			} else {
+				rowsAffected := result.RowsAffected()
+				if rowsAffected > 0 {
+					log.Printf("Refresh token revoked during logout")
+				}
+			}
+		}
+
+		// 4) 성공 응답
+		return c.JSON(LogoutResponse{
+			Message: "logged out successfully",
+		})
+	}
+}
+
+// LogoutAll 핸들러: 해당 사용자의 모든 세션(모든 디바이스)을 무효화
+// LogoutAll godoc
+// @Summary      전체 로그아웃 (모든 디바이스)
+// @Description  현재 사용자의 모든 Refresh Token을 무효화하여 모든 디바이스에서 로그아웃합니다.
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        Authorization header string true "Bearer {access_token}" default(Bearer )
+// @Success      200 {object} LogoutResponse
+// @Failure      401 {object} ErrorResponse
+// @Router       /auth/logout-all [post]
+func LogoutAll(d Deps) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		// JWT 미들웨어에서 저장한 학번(sub) - 이 핸들러는 인증이 필요함
+		studentID, ok := c.Locals("student_id").(string)
+		if !ok || studentID == "" {
+			return fiber.ErrUnauthorized
+		}
+
+		// 1) 현재 Access Token을 블랙리스트에 추가
+		authHeader := c.Get("Authorization")
+		if authHeader != "" && len(authHeader) > 7 && authHeader[:7] == "Bearer " {
+			accessToken := authHeader[7:]
+			if jti, err := util.ExtractJTI(accessToken); err == nil {
+				ttlMin := util.EnvInt("JWT_ACCESS_TTL_MIN", 10)
+				blacklistKey := "blacklist:" + jti
+				_, err := d.RDB.Set(c.Context(), blacklistKey, "revoked", time.Duration(ttlMin)*time.Minute).Result()
+				if err != nil {
+					log.Printf("Failed to blacklist current access token: %v", err)
+				}
+			}
+		}
+
+		// 2) 해당 사용자의 모든 Refresh Token을 revoke
+		result, err := d.DB.Exec(c.Context(),
+			`UPDATE auth_refresh_tokens
+			 SET revoked_at = now()
+			 WHERE student_id = $1 AND revoked_at IS NULL`,
+			studentID,
+		)
+		if err != nil {
+			log.Printf("Failed to revoke all refresh tokens for user %s: %v", studentID, err)
+			return fiber.ErrInternalServerError
+		}
+
+		rowsAffected := result.RowsAffected()
+		log.Printf("Revoked %d refresh tokens for user %s (logout-all)", rowsAffected, studentID)
+
+		// 3) 성공 응답
+		return c.JSON(LogoutResponse{
+			Message: "logged out from all devices successfully",
+		})
+	}
 }
 
 /*

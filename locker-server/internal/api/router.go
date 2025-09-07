@@ -20,6 +20,7 @@ func Setup(app *fiber.App, deps handlers.Deps) {
 	// --- 인증(로그인/리프레시) 엔드포인트는 공개(public) ---
 	v1.Post("/auth/login", handlers.Login(deps))     // 학번/이름/폰번호 확인 → 토큰 발급
 	v1.Post("/auth/refresh", handlers.Refresh(deps)) // 리프레시 토큰으로 액세스 갱신
+	v1.Post("/auth/logout", handlers.Logout(deps))   // 로그아웃 (토큰 무효화)
 
 	// [250904] 추가: 헬스 체크 엔드포인트
 	// --- 헬스 체크 엔드포인트 ---
@@ -39,6 +40,7 @@ func Setup(app *fiber.App, deps handlers.Deps) {
 	authed.Post("/lockers/:id/hold", handlers.HoldLocker(deps))       // 사물함 홀드(선점)
 	authed.Post("/lockers/:id/confirm", handlers.ConfirmLocker(deps)) // 확정
 	authed.Post("/lockers/:id/release", handlers.ReleaseLocker(deps)) // 해제
+	authed.Post("/auth/logout-all", handlers.LogoutAll(deps))         // 전체 로그아웃 (모든 디바이스)
 
 	// swagger
 	// app.Get("/swagger/*", fiberSwagger.WrapHandler)
