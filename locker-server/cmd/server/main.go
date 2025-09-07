@@ -39,7 +39,7 @@ import (
 func main() {
 	// env 파일 로딩
 	// 상대 경로: ../configs/.env
-	_ = godotenv.Load("/Users/potato/Desktop/Dev/Go_server/locker-server/configs/.env")
+	_ = godotenv.Load("/Users/potato/Desktop/Dev/Go_server/locker-server/configs/.env.prod")
 
 	// 서버의 표준 시간대(로그 타임스탬프 등)를 서울로 고정
 	_ = os.Setenv("TZ", "Asia/Seoul")
