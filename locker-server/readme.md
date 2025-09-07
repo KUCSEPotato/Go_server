@@ -44,6 +44,18 @@ http://localhost:3000/swagger/index.html
       - SELECT * FROM locker_assignments;
       - SELECT * FROM locker_info;
     - docker exec -it locker-server-redis-1 redis-cli
+
+  - 테스트 스크립트 이후 디비가 오염된 경우
+    - local
+      ``` bash
+      docker exec locker-server-pg-1 psql -U locker -d locker -c "DELETE FROM locker_assignments; UPDATE locker_info SET owner = NULL;"
+      docker exec locker-server-redis-1 redis-cli FLUSHALL
+      ```
+    - aws
+      ``` bash
+      docker exec locker-prod-pg psql -U locker -d locker -c "DELETE FROM locker_assignments; UPDATE locker_info SET owner = NULL;"
+      docker exec locker-prod-redis redis-cli FLUSHALL
+      ```
 - 서버 닫을 때는 컨트롤 + z || 컨트롤 + c (컨트롤 + z 사용시 아래의 명령어 사용 필요)
   - failed to listen: listen tcp4 :3000: bind: address already in use 인 경우
     - lsof -i :3000
@@ -51,6 +63,8 @@ http://localhost:3000/swagger/index.html
 - swag 명령어가 안될 경우
   - export PATH=$PATH:$(go env GOPATH)/bin 
   - 환경 변수 설정 필요
+- ssh 접속
+  - ssh -i "/Users/potato/Desktop/Dev/locker-server-key.pem" ubuntu@15.164.164.194
 
 # test data setting
 - student
