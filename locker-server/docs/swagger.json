@@ -191,6 +191,52 @@
                 }
             }
         },
+        "/auth/register": {
+            "post": {
+                "description": "새 사용자를 등록합니다. 학번은 중복될 수 없습니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "회원가입",
+                "parameters": [
+                    {
+                        "description": "회원가입 정보",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.RegisterRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.RegisterResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/health": {
             "get": {
                 "description": "서버 상태 확인 (DB, Redis 연결 상태 포함)",
@@ -385,7 +431,7 @@
         },
         "/lockers/{id}/hold": {
             "post": {
-                "description": "특정 사물함을 선점합니다 (5분간 예약). Redis와 DB를 통해 동시성 제어를 하며, 성공 시 사물함 정보를 반환합니다.",
+                "description": "특정 사물함을 선점합니다 (5분간 예약). Redis와 DB를 통해 동시성 제어를 하며, 성공 시 사물함 정보를 반환합니다. 신청 기간 외에는 접근이 불가능합니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -431,6 +477,12 @@
                     },
                     "401": {
                         "description": "인증 필요 - JWT 토큰이 없거나 유효하지 않음",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "신청 기간 외 - 신청 시작 전이거나 마감 후",
                         "schema": {
                             "$ref": "#/definitions/handlers.ErrorResponse"
                         }
@@ -647,6 +699,31 @@
                     "type": "string"
                 },
                 "refresh_token": {
+                    "type": "string"
+                }
+            }
+        },
+        "handlers.RegisterRequest": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "phone_number": {
+                    "type": "string"
+                },
+                "student_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "handlers.RegisterResponse": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string"
+                },
+                "student_id": {
                     "type": "string"
                 }
             }

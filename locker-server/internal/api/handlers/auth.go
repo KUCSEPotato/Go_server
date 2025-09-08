@@ -22,6 +22,17 @@ type Deps struct {
 }
 
 // 요청, 응답 구조체 정의
+type RegisterRequest struct {
+	StudentID string `json:"student_id"`
+	Name      string `json:"name"`
+	Phone     string `json:"phone_number"`
+}
+
+type RegisterResponse struct {
+	Message   string `json:"message"`
+	StudentID string `json:"student_id"`
+}
+
 type LoginRequest struct {
 	StudentID string `json:"student_id"`
 	Name      string `json:"name"`
@@ -52,6 +63,79 @@ type RefreshResponse struct {
 
 type LogoutResponse struct {
 	Message string `json:"message"`
+}
+
+// Register 핸들러: 새 사용자 등록 (학번/이름/전화번호)
+// Register godoc
+// @Summary      회원가입
+// @Description  새 사용자를 등록합니다. 학번은 중복될 수 없습니다.
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        payload body RegisterRequest true "회원가입 정보"
+// @Success      201 {object} RegisterResponse
+// @Failure      400 {object} ErrorResponse
+// @Failure      409 {object} ErrorResponse
+// @Router       /auth/register [post]
+func Register(d Deps) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		// 1) 요청 바디(JSON) 파싱
+		var req RegisterRequest
+		if err := c.BodyParser(&req); err != nil {
+			return fiber.ErrBadRequest
+		}
+
+		// 2) 기본 유효성 검사
+		if req.StudentID == "" || req.Name == "" || req.Phone == "" {
+			return fiber.NewError(fiber.StatusBadRequest, "missing required fields: student_id, name, phone_number")
+		}
+
+		// 3) 학번 형식 검증 (예: 숫자만, 길이 제한 등)
+		if len(req.StudentID) != 10 {
+			return fiber.NewError(fiber.StatusBadRequest, "invalid student_id format")
+		}
+
+		// 4) 전화번호 형식 간단 검증
+		if len(req.Phone) < 10 || len(req.Phone) > 15 {
+			return fiber.NewError(fiber.StatusBadRequest, "invalid phone_number format")
+		}
+
+		// 5) 이름 길이 검증
+		if len(req.Name) < 2 || len(req.Name) > 20 {
+			return fiber.NewError(fiber.StatusBadRequest, "invalid name length")
+		}
+
+		// 6) 중복 학번 체크
+		var exists bool
+		err := d.DB.QueryRow(c.Context(),
+			`SELECT EXISTS(SELECT 1 FROM users WHERE student_id=$1)`,
+			req.StudentID,
+		).Scan(&exists)
+		if err != nil {
+			return fiber.ErrInternalServerError
+		}
+		if exists {
+			return fiber.NewError(fiber.StatusConflict, "student_id already exists")
+		}
+
+		// 7) DB에 새 사용자 삽입
+		_, err = d.DB.Exec(c.Context(),
+			`INSERT INTO users (student_id, name, phone_number, created_at)
+			 VALUES ($1, $2, $3, now())`,
+			req.StudentID, req.Name, req.Phone,
+		)
+		if err != nil {
+			// PostgreSQL 고유 제약 조건 위반 등의 경우도 고려
+			log.Printf("Register: failed to insert user: %v", err)
+			return fiber.ErrInternalServerError
+		}
+
+		// 8) 성공 응답
+		return c.Status(fiber.StatusCreated).JSON(RegisterResponse{
+			Message:   "user registered successfully",
+			StudentID: req.StudentID,
+		})
+	}
 }
 
 // Login 핸들러: 학번/이름/폰번호가 users에 존재하면 Access/Refresh 발급

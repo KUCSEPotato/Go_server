@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"os"
 	"strconv"
 	"time"
 
@@ -8,6 +9,23 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/jackc/pgx/v5"
 )
+
+var lockerApplicationStart time.Time
+var lockerApplicationStartErr error
+var lockerApplicationEnd time.Time
+var lockerApplicationEndErr error
+
+func init() {
+	startStr := os.Getenv("LOCKER_APPLICATION_START")
+	if startStr != "" {
+		lockerApplicationStart, lockerApplicationStartErr = time.Parse(time.RFC3339, startStr)
+	}
+
+	endStr := os.Getenv("LOCKER_APPLICATION_END")
+	if endStr != "" {
+		lockerApplicationEnd, lockerApplicationEndErr = time.Parse(time.RFC3339, endStr)
+	}
+}
 
 // Locker Response
 type LockerResponse struct {
@@ -101,7 +119,7 @@ func ListLockers(d Deps) fiber.Handler {
 // - 실패 케이스: 이미 hold/confirmed가 존재 → 409
 // HoldLocker godoc
 // @Summary      사물함 선점
-// @Description  특정 사물함을 선점합니다 (5분간 예약). Redis와 DB를 통해 동시성 제어를 하며, 성공 시 사물함 정보를 반환합니다.
+// @Description  특정 사물함을 선점합니다 (5분간 예약). Redis와 DB를 통해 동시성 제어를 하며, 성공 시 사물함 정보를 반환합니다. 신청 기간 외에는 접근이 불가능합니다.
 // @Tags         lockers
 // @Accept       json
 // @Produce      json
@@ -110,11 +128,23 @@ func ListLockers(d Deps) fiber.Handler {
 // @Success      201 {object} HoldSuccessResponse "선점 성공 - 사물함 정보 포함"
 // @Failure      400 {object} ErrorResponse "잘못된 요청 - 유효하지 않은 사물함 ID"
 // @Failure      401 {object} ErrorResponse "인증 필요 - JWT 토큰이 없거나 유효하지 않음"
+// @Failure      403 {object} ErrorResponse "신청 기간 외 - 신청 시작 전이거나 마감 후"
 // @Failure      409 {object} ErrorResponse "이미 선점됨 - 다른 사용자가 이미 선점했거나 본인이 이미 선점한 상태"
 // @Failure      503 {object} ErrorResponse "서비스 일시 불가 - Redis 서버 장애"
 // @Router       /lockers/{id}/hold [post]
 func HoldLocker(d Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
+		// 신청 시작 시간 체크
+		now := time.Now()
+		if lockerApplicationStartErr == nil && now.Before(lockerApplicationStart) {
+			return fiber.NewError(fiber.StatusForbidden, "아직 신청 기간이 아닙니다. 신청 시작: "+lockerApplicationStart.Format("2006-01-02 15:04:05"))
+		}
+
+		// 신청 마감 시간 체크
+		if lockerApplicationEndErr == nil && now.After(lockerApplicationEnd) {
+			return fiber.NewError(fiber.StatusForbidden, "신청 기간이 마감되었습니다. 신청 마감: "+lockerApplicationEnd.Format("2006-01-02 15:04:05"))
+		}
+
 		// URL 파라미터에서 locker id 추출
 		id, err := strconv.Atoi(c.Params("id"))
 		if err != nil {
