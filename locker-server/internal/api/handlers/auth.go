@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"log"
 	"net"
+	"regexp"
 	"time"
 
 	"github.com/KUCSEPotato/locker-server/internal/util"
@@ -98,6 +99,11 @@ func Register(d Deps) fiber.Handler {
 		// 4) 전화번호 형식 간단 검증
 		if len(req.Phone) < 10 || len(req.Phone) > 15 {
 			return fiber.NewError(fiber.StatusBadRequest, "invalid phone_number format")
+		}
+		// 4-2) 전화번호에 숫자만 들어갔는지 검사
+		matched, _ := regexp.MatchString(`^[0-9]+$`, req.Phone)
+		if !matched {
+			return fiber.NewError(fiber.StatusBadRequest, "only numeric characters are allowed in phone_number")
 		}
 
 		// 5) 이름 길이 검증
