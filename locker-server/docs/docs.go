@@ -47,7 +47,7 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "only numeric characters are allowed in phone_number",
                         "schema": {
                             "$ref": "#/definitions/handlers.ErrorResponse"
                         }
@@ -230,13 +230,13 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "only numeric characters are allowed in phone_number",
                         "schema": {
                             "$ref": "#/definitions/handlers.ErrorResponse"
                         }
                     },
                     "409": {
-                        "description": "Conflict",
+                        "description": "student_id already exists",
                         "schema": {
                             "$ref": "#/definitions/handlers.ErrorResponse"
                         }

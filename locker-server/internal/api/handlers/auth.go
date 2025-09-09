@@ -75,8 +75,9 @@ type LogoutResponse struct {
 // @Produce      json
 // @Param        payload body RegisterRequest true "회원가입 정보"
 // @Success      201 {object} RegisterResponse
-// @Failure      400 {object} ErrorResponse
-// @Failure      409 {object} ErrorResponse
+// @Failure      400 {object} ErrorResponse "missing required fields: student_id, name, phone_number"
+// @Failure      400 {object} ErrorResponse "only numeric characters are allowed in phone_number"
+// @Failure      409 {object} ErrorResponse "student_id already exists"
 // @Router       /auth/register [post]
 func Register(d Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -153,7 +154,8 @@ func Register(d Deps) fiber.Handler {
 // @Produce      json
 // @Param        payload body LoginRequest true "로그인 정보"
 // @Success      200 {object} LoginResponse
-// @Failure      400 {object} ErrorResponse
+// @Failure      400 {object} ErrorResponse "missing required fields: student_id, name, phone_number"
+// @Failure      400 {object} ErrorResponse "only numeric characters are allowed in phone_number"
 // @Failure      401 {object} ErrorResponse
 // @Router       /auth/login [post]
 func Login(d Deps) fiber.Handler {
