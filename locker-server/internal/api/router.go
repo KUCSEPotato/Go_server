@@ -27,6 +27,10 @@ func Setup(app *fiber.App, deps handlers.Deps) {
 	// --- 헬스 체크 엔드포인트 ---
 	v1.Get("/health", handlers.HealthCheck(deps.DB, deps.RDB)) // DB, Redis 상태 확인
 
+	// [250909] 추가: 모든 유저 조회 (관리자용)
+	// --- 모든 유저 조회 (관리자용) ---
+	v1.Get("/users/GetAllUsers", handlers.GetAllUsersHandler(deps.DB)) // 모든 유저 조회
+
 	// --- 아래부터는 JWT가 있어야 접근 가능한 보호 API ---
 	// 빈 prefix("")에 JWT 미들웨어를 덧씌워서 같은 그룹 안 라우트에 공통적용
 	// 미들웨어에서 블랙리스트 체크를 위해 deps 전달

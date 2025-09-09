@@ -69,7 +69,7 @@ type LogoutResponse struct {
 // Register 핸들러: 새 사용자 등록 (학번/이름/전화번호)
 // Register godoc
 // @Summary      회원가입
-// @Description  새 사용자를 등록합니다. 학번은 중복될 수 없습니다.
+// @Description  새 사용자를 등록합니다. 학번은 중복될 수 없습니다. 전화번호란에는 숫자만 허용합니다.
 // @Tags         auth
 // @Accept       json
 // @Produce      json
@@ -147,7 +147,7 @@ func Register(d Deps) fiber.Handler {
 // Login 핸들러: 학번/이름/폰번호가 users에 존재하면 Access/Refresh 발급
 // Login godoc
 // @Summary      로그인 (학번/이름/전화번호 확인)
-// @Description  일치하는 사용자가 있으면 Access/Refresh 토큰 발급
+// @Description  일치하는 사용자가 있으면 Access/Refresh 토큰 발급, 전화번호란은 숫자만 허용
 // @Tags         auth
 // @Accept       json
 // @Produce      json
@@ -167,6 +167,11 @@ func Login(d Deps) fiber.Handler {
 		// 아주 기초적인 유효성 검사(필드 비었는지 등)
 		if req.StudentID == "" || req.Name == "" || req.Phone == "" {
 			return fiber.NewError(fiber.StatusBadRequest, "missing required fields: student_id, name, phone_number")
+		}
+		// 전화번호에 숫자만 들어갔는지 검사
+		matched, _ := regexp.MatchString(`^[0-9]+$`, req.Phone)
+		if !matched {
+			return fiber.NewError(fiber.StatusBadRequest, "only numeric characters are allowed in phone_number")
 		}
 
 		// 2) DB에서 존재 여부 확인

@@ -26,26 +26,94 @@ http://localhost:3000/swagger/index.html
     - kill -9 "pid"
 
 # 구현 사항
+- swag
+  - swag init -g cmd/server/main.go -o docs/
 - docker
   - docker 띄우기
+    - main
+      - docker compose -f docker/docker-compose.yml -p locker-dev up -d --build
     - docker compose up -d
+    - prod
+      - cd /Users/potato/Desktop/Dev/Go_server/locker-server && docker compose -f docker/docker-compose.prod.yml up --build
+      - docker build -f docker/Dockerfile -t locker-server:prod .
+      - docker compose -f docker/docker-compose.prod.yml up -d --build
+      - docker compose -f docker/docker-compose.prod.yml down --remove-orphans
+      - docker rm -f locker-prod-redis 2>/dev/null || echo "Redis container not found or already removed"
+
+      - 충돌 날때
+        # 1. 실행 중인 컨테이너들 강제 중지 및 삭제
+          docker stop locker-prod-app locker-prod-pg locker-prod-redis
+          docker rm locker-prod-app locker-prod-pg locker-prod-redis
+
+          # 2. 네트워크도 삭제 (필요한 경우)
+          docker network rm locker-prod-network
+
+          # 3. 다시 컨테이너 시작
+          docker compose -f docker/docker-compose.prod.yml up --build
   - 실행 확인
     - docker ps
     - docker ps -a
     - docker compose ps
     - docker info
   - postgresql 컨테이너 접속
-    - docker exec -it locker-server-pg-1 psql -U locker -d locker
+    - [main] docker exec -it locker-dev-pg psql -U locker -d locker
+    - [prod] docker exec -it locker-prod-pg psql -U locker -d locker
+      ``` bash
+      -- 모든 테이블 목록 확인
+      \dt
+
+      -- 각 테이블의 구조 확인
+      \d users
+      \d locker_info
+      \d locker_assignments
+      \d locker_locations
+      \d auth_refresh_tokens
+
+      -- 테이블 데이터 확인
+      SELECT * FROM users;
+      SELECT * FROM locker_info;
+      SELECT * FROM locker_assignments;
+      SELECT * FROM locker_locations;
+
+      -- PostgreSQL 접속 종료
+      \q
+      
+      ```
       - # locker_assignments 초기화
       - TRUNCATE locker_assignments RESTART IDENTITY;
       - # locker_info 초기화
       - UPDATE locker_info SET owner = NULL;
-      - docker exec -it locker-server-pg-1 psql -U locker -d locker -c "UPDATE locker_info SET owner = NULL; 
-      - TRUNCATE locker_assignments RESTART IDENTITY;"
       - # 확인
       - SELECT * FROM locker_assignments;
       - SELECT * FROM locker_info;
     - docker exec -it locker-server-redis-1 redis-cli
+
+  - 테스트 스크립트 이후 디비가 오염된 경우
+    - local
+      ``` bash
+      docker exec locker-server-pg-1 psql -U locker -d locker -c "DELETE FROM locker_assignments; UPDATE locker_info SET owner = NULL;"
+      docker exec locker-server-redis-1 redis-cli FLUSHALL
+      ```
+    - aws
+      ``` bash
+      docker exec locker-prod-pg psql -U locker -d locker -c "DELETE FROM locker_assignments; UPDATE locker_info SET owner = NULL;"
+      docker exec locker-prod-redis redis-cli FLUSHALL
+      ```
+  - token 관련 데이터 초기화
+    - local
+      ``` bash
+      # refresh token 테이블 비우기
+      docker exec locker-prod-pg psql -U locker -d locker -c "TRUNCATE auth_refresh_tokens RESTART IDENTITY;"
+      # Redis blacklist 비우기  
+      docker exec locker-prod-redis redis-cli FLUSHALL
+      ```
+    - aws
+      ``` bash
+      # refresh token 테이블 비우기
+      docker exec locker-prod-pg psql -U locker -d locker -c "TRUNCATE auth_refresh_tokens RESTART IDENTITY;"
+      # Redis blacklist 비우기
+      docker exec locker-prod-redis redis-cli FLUSHALL
+      ```
 - 서버 닫을 때는 컨트롤 + z || 컨트롤 + c (컨트롤 + z 사용시 아래의 명령어 사용 필요)
   - failed to listen: listen tcp4 :3000: bind: address already in use 인 경우
     - lsof -i :3000
@@ -53,22 +121,139 @@ http://localhost:3000/swagger/index.html
 - swag 명령어가 안될 경우
   - export PATH=$PATH:$(go env GOPATH)/bin 
   - 환경 변수 설정 필요
+- ssh 접속
+  - ssh -i "/Users/potato/Desktop/Dev/locker-server-key.pem" ubuntu@43.203.248.2
+
+# 로컬 DB를 AWS로 마이그레이션
+``` bash
+# 1. 로컬에서 데이터베이스 덤프 생성
+docker exec locker-prod-pg pg_dump -U locker -d locker --clean --if-exists > locker_db_dump.sql
+
+# 2. 덤프 파일을 AWS 서버로 전송
+scp -i "/Users/potato/Desktop/Dev/locker-server-key.pem" locker_db_dump.sql ubuntu@43.201.95.94:~/
+
+# 3. AWS 서버에서 Docker 컨테이너 실행 후 데이터 복원
+# AWS 서버에 SSH 접속 후:
+# docker exec -i locker-prod-pg psql -U locker -d locker < locker_db_dump.sql
+
+# 4. 복원 확인
+# docker exec -it locker-prod-pg psql -U locker -d locker -c "\dt"
+# docker exec -it locker-prod-pg psql -U locker -d locker -c "SELECT COUNT(*) FROM users;"
+```
+
+# AWS에 최신 데이터베이스 동기화
+``` bash
+# 방법 1: 로컬 DB 덤프를 AWS로 복사
+# 1. 로컬에서 현재 DB 덤프 생성
+docker exec locker-prod-pg pg_dump -U locker -d locker --clean --if-exists > locker_db_dump_new.sql
+
+# 2. AWS 서버로 전송
+scp -i "/Users/potato/Desktop/Dev/locker-server-key.pem" locker_db_dump_new.sql ubuntu@43.203.248.2:~/
+
+# 3. AWS 서버에서 복원 (SSH 접속 후)
+docker exec -i locker-prod-pg psql -U locker -d locker < locker_db_dump_new.sql
+
+# 방법 2: AWS에서 직접 데이터 재생성
+# 1. 기존 데이터 삭제
+docker exec -it locker-prod-pg psql -U locker -d locker -c "
+DELETE FROM locker_assignments;
+DELETE FROM locker_info; 
+DELETE FROM locker_locations;
+"
+
+# 2. 새로운 위치 및 사물함 데이터 생성
+docker exec -it locker-prod-pg psql -U locker -d locker -c "
+INSERT INTO locker_locations (location_id, name) VALUES
+(1, '정보관 B1 엘리베이터 옆1'), (2, '정보관 B1 엘리베이터 옆2'),
+(3, '정보관 B1 기계실 옆'), (4, '정보관 2층'), (5, '정보관 3층'),
+(6, '과학도서관 6층 620호 옆'), (7, '과학도서관 6층 614호 옆');
+SELECT setval('locker_locations_location_id_seq', 7, true);
+
+INSERT INTO locker_info (locker_id, location_id) VALUES
+(101, 1), (102, 1), (103, 1), (104, 2), (105, 2), (106, 2),
+(201, 3), (202, 3), (301, 4), (302, 4), (303, 4), (304, 4),
+(401, 5), (402, 5), (403, 5), (404, 5),
+(501, 6), (502, 6), (503, 6), (601, 7), (602, 7), (603, 7);
+"
+
+# 3. 사용자 데이터 동기화
+docker exec -it locker-prod-pg psql -U locker -d locker -c "
+TRUNCATE auth_refresh_tokens RESTART IDENTITY;
+TRUNCATE users RESTART IDENTITY CASCADE;
+INSERT INTO users (student_id, name, phone_number, created_at, updated_at) VALUES 
+('2023321234', '홍길동', '01012345678', NOW(), NOW()),
+('2023325678', '김철수', '01087654321', NOW(), NOW());
+"
+```
+
+# 홍길동, 김철수 학번 변경
+``` bash
+docker exec -it locker-prod-pg psql -U locker -d locker -c "INSERT INTO users (student_id, name, phone_number, created_at, updated_at) VALUES ('2023321234', '홍길동', '01012345679', NOW(), NOW());"
+
+docker exec -it locker-prod-pg psql -U locker -d locker -c "INSERT INTO users (student_id, name, phone_number, created_at, updated_at) VALUES ('2023325678', '김철수', '01087654322', NOW(), NOW());"
+
+docker exec -it locker-prod-pg psql -U locker -d locker -c "DELETE FROM users WHERE student_id IN ('20231234', '20231235');"
+
+docker exec -it locker-prod-pg psql -U locker -d locker -c "UPDATE users SET phone_number = '01012345678' WHERE student_id = '2023321234';"
+
+docker exec -it locker-prod-pg psql -U locker -d locker -c "UPDATE users SET phone_number = '01087654321' WHERE student_id = '2023325678';"
+
+docker exec -it locker-prod-pg psql -U locker -d locker -c "SELECT * FROM users ORDER BY student_id;"
+```
+
+# user 테이블 초기화 및 재설정
+``` bash
+# 1. 외래키 제약 때문에 관련 테이블들도 함께 비워야 함
+docker exec -it locker-prod-pg psql -U locker -d locker -c "TRUNCATE auth_refresh_tokens RESTART IDENTITY;"
+docker exec -it locker-prod-pg psql -U locker -d locker -c "DELETE FROM locker_assignments;"
+docker exec -it locker-prod-pg psql -U locker -d locker -c "UPDATE locker_info SET owner = NULL;"
+docker exec -it locker-prod-pg psql -U locker -d locker -c "TRUNCATE users RESTART IDENTITY CASCADE;"
+
+# 2. 테스트 사용자 재추가
+docker exec -it locker-prod-pg psql -U locker -d locker -c "INSERT INTO users (student_id, name, phone_number, created_at, updated_at) VALUES ('2023321234', '홍길동', '01012345678', NOW(), NOW());"
+docker exec -it locker-prod-pg psql -U locker -d locker -c "INSERT INTO users (student_id, name, phone_number, created_at, updated_at) VALUES ('2023325678', '김철수', '01087654321', NOW(), NOW());"
+
+# 3. 확인
+docker exec -it locker-prod-pg psql -U locker -d locker -c "SELECT * FROM users ORDER BY student_id;"
+
+# 4. Redis 캐시도 비우기 (선택적)
+docker exec locker-prod-redis redis-cli FLUSHALL
+```
+
+# AWS EC2 Docker 권한 설정 (최초 1회)
+``` bash
+# Docker 그룹에 현재 사용자 추가
+sudo usermod -aG docker $USER
+
+# 새로운 그룹 설정 적용 (재로그인 또는 아래 명령어)
+newgrp docker
+
+# 또는 재로그인
+# exit 후 다시 ssh 접속
+
+# Docker 서비스 시작
+sudo systemctl start docker
+sudo systemctl enable docker
+
+# 권한 확인
+docker ps
+```
 
 # test data setting
 - student
-  - {"student_id":"20231234","name":"홍길동","phone_number":"01012345678"}
-  - {"student_id":"20231235","name":"김철수","phone_number":"01087654321"}
+  - {"student_id":"2023321234","name":"홍길동","phone_number":"01012345678"}
+  - {"student_id":"2023325678","name":"김철수","phone_number":"01087654321"}
 - curl test flow
   1. 로그인
     ``` bash
     curl -X POST http://localhost:3000/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"student_id":"20231234","name":"홍길동","phone_number":"01012345678"}'
+  -d '{"student_id":"2023321234","name":"홍길동","phone_number":"01012345678"}'
     ```
     ``` bash
     curl -X POST http://localhost:3000/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"student_id":"20231235","name":"김철수","phone_number":"01087654321"}'
+  -d '{"student_id":"2023325678","name":"김철수","phone_number":"01087654321"}'
     ```
   2. 사물함 선점
     ``` bash
