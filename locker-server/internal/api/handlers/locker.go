@@ -363,7 +363,7 @@ func ReleaseLocker(d Deps) fiber.Handler {
 		defer tx.Rollback(c.Context())
 
 		// 1) assignments: confirmed → cancelled
-		_, err = tx.Exec(c.Context(),
+		ct, err := tx.Exec(c.Context(),
 			`UPDATE locker_assignments
 			   SET state='cancelled', released_at=now()
 			 WHERE locker_id=$1 AND student_id=$2 AND state='confirmed'`,
@@ -371,10 +371,24 @@ func ReleaseLocker(d Deps) fiber.Handler {
 		if err != nil {
 			return fiber.ErrInternalServerError
 		}
+		if ct.RowsAffected() == 0 {
+			return fiber.NewError(fiber.StatusNotFound, "No confirmed locker found to release")
+		}
 
 		// 2) locker_info.owner=NULL (내가 소유자인 경우에만)
-		_, err = tx.Exec(c.Context(),
+		ct, err = tx.Exec(c.Context(),
 			`UPDATE locker_info SET owner=NULL WHERE locker_id=$1 AND owner=$2`,
+			id, student)
+		if err != nil {
+			return fiber.ErrInternalServerError
+		}
+		if ct.RowsAffected() == 0 {
+			return fiber.NewError(fiber.StatusNotFound, "No locker ownership found to release")
+		}
+
+		// 3) Remove any lingering hold assignments
+		_, err = tx.Exec(c.Context(),
+			`DELETE FROM locker_assignments WHERE locker_id=$1 AND student_id=$2 AND state='hold'`,
 			id, student)
 		if err != nil {
 			return fiber.ErrInternalServerError
@@ -390,6 +404,65 @@ func ReleaseLocker(d Deps) fiber.Handler {
 
 		return c.JSON(SimpleSuccessResponse{
 			Message: "locker released successfully",
+		})
+	}
+}
+
+// ReleaseHold: "hold 해제"
+// - hold 상태인 사물함 예약을 취소합니다.
+// ReleaseHold godoc
+// @Summary      사물함 hold 해제
+// @Description  hold 상태인 사물함 예약을 취소합니다. 사물함이 다시 사용 가능해집니다.
+// @Tags         lockers
+// @Accept       json
+// @Produce      json
+// @Param        Authorization header string true "Bearer {access_token}" default(Bearer )
+// @Param        id path int true "사물함 ID (hold 상태의 사물함)" minimum(1) maximum(999) example(101)
+// @Success      200 {object} SimpleSuccessResponse "hold 해제 완료"
+// @Failure      400 {object} ErrorResponse "잘못된 요청 - 유효하지 않은 사물함 ID"
+// @Failure      401 {object} ErrorResponse "인증 필요 - JWT 토큰이 없거나 유효하지 않음"
+// @Failure      404 {object} ErrorResponse "사물함을 찾을 수 없음 - hold 상태가 아님"
+// @Failure      500 {object} ErrorResponse "서버 오류 - 데이터베이스 트랜잭션 실패"
+// @Router       /lockers/{id}/release-hold [post]
+func ReleaseHold(d Deps) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		id, err := strconv.Atoi(c.Params("id"))
+		if err != nil {
+			return fiber.ErrBadRequest
+		}
+		student, _ := c.Locals("student_id").(string)
+		if student == "" {
+			return fiber.ErrUnauthorized
+		}
+
+		// 트랜잭션
+		tx, err := d.DB.Begin(c.Context())
+		if err != nil {
+			return fiber.ErrInternalServerError
+		}
+		defer tx.Rollback(c.Context())
+
+		// hold 상태 해제
+		ct, err := tx.Exec(c.Context(),
+			`DELETE FROM locker_assignments WHERE locker_id=$1 AND student_id=$2 AND state='hold'`,
+			id, student)
+		if err != nil {
+			return fiber.ErrInternalServerError
+		}
+		if ct.RowsAffected() == 0 {
+			return fiber.NewError(fiber.StatusNotFound, "No hold found to release")
+		}
+
+		// 커밋
+		if err := tx.Commit(c.Context()); err != nil {
+			return fiber.ErrInternalServerError
+		}
+
+		// Redis 키 제거 (베스트 에포트)
+		_, _ = d.RDB.Del(c.Context(), "locker:hold:"+strconv.Itoa(id)).Result()
+
+		return c.JSON(SimpleSuccessResponse{
+			Message: "hold released successfully",
 		})
 	}
 }

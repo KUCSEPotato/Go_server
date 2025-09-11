@@ -156,17 +156,17 @@ func LoginOrRegister(d Deps) fiber.Handler {
 		// 4) 원자적 UPSERT: (student_id, name, phone_number) 유니크 기준
 		//    - 새 레코드면 201, 기존이면 200
 		var (
-			serialID int
+			serialID int = int(customSerial)
 			inserted bool
 		)
 		err = d.DB.QueryRow(c.Context(), `
-			INSERT INTO users (student_id, name, phone_number, custom_serial, created_at)
+			INSERT INTO users (student_id, name, phone_number, serial_id, created_at)
 			VALUES ($1, $2, $3, $4, now())
 			ON CONFLICT (student_id, name, phone_number)
 			DO UPDATE SET
-				-- 필요 시 최신 전화번호/이름/커스텀 시리얼을 동기화하고 싶다면 아래를 조정
-				custom_serial = EXCLUDED.custom_serial
-			RETURNING id, (xmax = 0) AS inserted
+    		name = EXCLUDED.name,
+    		phone_number = EXCLUDED.phone_number
+			RETURNING serial_id, (xmax = 0) AS inserted
 		`, req.StudentID, req.Name, req.Phone, customSerial).Scan(&serialID, &inserted)
 		if err != nil {
 			log.Printf("LoginOrRegister: upsert users failed: %v", err)
@@ -210,7 +210,7 @@ func LoginOrRegister(d Deps) fiber.Handler {
 		return c.Status(statusCode).JSON(LoginOrRegisterResponse{
 			AccessToken:  accessToken,
 			RefreshToken: refreshPlain, // 평문은 이 한 번만 반환
-			SerialID:     serialID,     // DB PK (자동 증가)
+			SerialID:     serialID,
 		})
 	}
 }

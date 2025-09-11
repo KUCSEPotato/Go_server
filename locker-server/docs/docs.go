@@ -677,6 +677,73 @@ const docTemplate = `{
                 }
             }
         },
+        "/lockers/{id}/release-hold": {
+            "post": {
+                "description": "hold 상태인 사물함 예약을 취소합니다. 사물함이 다시 사용 가능해집니다.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "lockers"
+                ],
+                "summary": "사물함 hold 해제",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "default": "Bearer",
+                        "description": "Bearer {access_token}",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "maximum": 999,
+                        "minimum": 1,
+                        "type": "integer",
+                        "example": 101,
+                        "description": "사물함 ID (hold 상태의 사물함)",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "hold 해제 완료",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.SimpleSuccessResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "잘못된 요청 - 유효하지 않은 사물함 ID",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "인증 필요 - JWT 토큰이 없거나 유효하지 않음",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "사물함을 찾을 수 없음 - hold 상태가 아님",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "서버 오류 - 데이터베이스 트랜잭션 실패",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/users/GetAllUsers": {
             "get": {
                 "description": "users 테이블의 전체 유저를 조회하고, 총 개수도 함께 반환합니다.",
