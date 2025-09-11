@@ -56,7 +56,7 @@
         },
         "/auth/login-or-register": {
             "post": {
-                "description": "학번/이름/전화번호가 일치하는 사용자가 있으면 로그인, 없으면 자동으로 회원가입 후 로그인. Register와 Login 함수의 모든 기능 통합.",
+                "description": "학번/이름/전화번호가 일치하면 로그인, 불일치하면 새로 회원가입 후 로그인.",
                 "consumes": [
                     "application/json"
                 ],
@@ -74,7 +74,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handlers.LoginRequest"
+                            "$ref": "#/definitions/handlers.LoginOrRegisterRequest"
                         }
                     }
                 ],
@@ -82,13 +82,13 @@
                     "200": {
                         "description": "기존 사용자 로그인 성공",
                         "schema": {
-                            "$ref": "#/definitions/handlers.LoginResponse"
+                            "$ref": "#/definitions/handlers.LoginOrRegisterResponse"
                         }
                     },
                     "201": {
                         "description": "새 사용자 회원가입 및 로그인 성공",
                         "schema": {
-                            "$ref": "#/definitions/handlers.LoginResponse"
+                            "$ref": "#/definitions/handlers.LoginOrRegisterResponse"
                         }
                     },
                     "400": {
@@ -782,6 +782,34 @@
                 "owner": {
                     "description": "null 가능",
                     "type": "string"
+                }
+            }
+        },
+        "handlers.LoginOrRegisterRequest": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "phone_number": {
+                    "type": "string"
+                },
+                "student_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "handlers.LoginOrRegisterResponse": {
+            "type": "object",
+            "properties": {
+                "access_token": {
+                    "type": "string"
+                },
+                "refresh_token": {
+                    "type": "string"
+                },
+                "serial_id": {
+                    "type": "integer"
                 }
             }
         },

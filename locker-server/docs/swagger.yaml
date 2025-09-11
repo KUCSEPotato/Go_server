@@ -56,6 +56,24 @@ definitions:
         description: null 가능
         type: string
     type: object
+  handlers.LoginOrRegisterRequest:
+    properties:
+      name:
+        type: string
+      phone_number:
+        type: string
+      student_id:
+        type: string
+    type: object
+  handlers.LoginOrRegisterResponse:
+    properties:
+      access_token:
+        type: string
+      refresh_token:
+        type: string
+      serial_id:
+        type: integer
+    type: object
   handlers.LoginRequest:
     properties:
       name:
@@ -181,26 +199,25 @@ paths:
     post:
       consumes:
       - application/json
-      description: 학번/이름/전화번호가 일치하는 사용자가 있으면 로그인, 없으면 자동으로 회원가입 후 로그인. Register와 Login
-        함수의 모든 기능 통합.
+      description: 학번/이름/전화번호가 일치하면 로그인, 불일치하면 새로 회원가입 후 로그인.
       parameters:
       - description: 로그인/회원가입 정보
         in: body
         name: payload
         required: true
         schema:
-          $ref: '#/definitions/handlers.LoginRequest'
+          $ref: '#/definitions/handlers.LoginOrRegisterRequest'
       produces:
       - application/json
       responses:
         "200":
           description: 기존 사용자 로그인 성공
           schema:
-            $ref: '#/definitions/handlers.LoginResponse'
+            $ref: '#/definitions/handlers.LoginOrRegisterResponse'
         "201":
           description: 새 사용자 회원가입 및 로그인 성공
           schema:
-            $ref: '#/definitions/handlers.LoginResponse'
+            $ref: '#/definitions/handlers.LoginOrRegisterResponse'
         "400":
           description: invalid name length
           schema:
