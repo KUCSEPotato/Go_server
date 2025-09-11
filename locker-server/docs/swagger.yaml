@@ -6,6 +6,15 @@ definitions:
         example: invalid credentials
         type: string
     type: object
+  handlers.GetMeResponse:
+    properties:
+      name:
+        type: string
+      phone_number:
+        type: string
+      student_id:
+        type: string
+    type: object
   handlers.HoldSuccessResponse:
     properties:
       expires_in:
@@ -226,6 +235,40 @@ paths:
           schema:
             $ref: '#/definitions/handlers.ErrorResponse'
       summary: 전체 로그아웃 (모든 디바이스)
+      tags:
+      - auth
+  /auth/me:
+    get:
+      consumes:
+      - application/json
+      description: JWT 토큰을 통해 인증된 현재 사용자의 학번, 이름, 전화번호를 반환합니다.
+      parameters:
+      - default: Bearer
+        description: Bearer {access_token}
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.GetMeResponse'
+        "401":
+          description: unauthorized - invalid or missing token
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "404":
+          description: user not found
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: 현재 로그인된 사용자 정보 조회
       tags:
       - auth
   /auth/refresh:

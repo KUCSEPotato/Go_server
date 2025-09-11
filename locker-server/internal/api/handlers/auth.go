@@ -66,6 +66,12 @@ type LogoutResponse struct {
 	Message string `json:"message"`
 }
 
+type GetMeResponse struct {
+	StudentID string `json:"student_id"`
+	Name      string `json:"name"`
+	Phone     string `json:"phone_number"`
+}
+
 // Register 핸들러: 새 사용자 등록 (학번/이름/전화번호)
 // Register godoc
 // @Summary      회원가입
@@ -348,6 +354,51 @@ func Refresh(d Deps) fiber.Handler {
 		return c.JSON(RefreshResponse{
 			AccessToken:  token,
 			RefreshToken: refreshPlain,
+		})
+	}
+}
+
+// GetMe 핸들러: 현재 로그인된 사용자의 정보 조회
+// GetMe godoc
+// @Summary      현재 로그인된 사용자 정보 조회
+// @Description  JWT 토큰을 통해 인증된 현재 사용자의 학번, 이름, 전화번호를 반환합니다.
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        Authorization header string true "Bearer {access_token}" default(Bearer )
+// @Success      200 {object} GetMeResponse
+// @Failure      401 {object} ErrorResponse "unauthorized - invalid or missing token"
+// @Failure      404 {object} ErrorResponse "user not found"
+// @Failure      500 {object} ErrorResponse "internal server error"
+// @Router       /auth/me [get]
+func GetMe(d Deps) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		// JWT 미들웨어에서 저장한 학번(sub) - 이 핸들러는 인증이 필요함
+		studentID, ok := c.Locals("student_id").(string)
+		if !ok || studentID == "" {
+			return fiber.ErrUnauthorized
+		}
+
+		// DB에서 해당 사용자 정보 조회
+		var name, phone string
+		err := d.DB.QueryRow(c.Context(),
+			`SELECT name, phone_number FROM users WHERE student_id = $1 LIMIT 1`,
+			studentID,
+		).Scan(&name, &phone)
+
+		if err != nil {
+			if err == pgx.ErrNoRows {
+				return fiber.NewError(fiber.StatusNotFound, "user not found")
+			}
+			log.Printf("GetMe: failed to query user info: %v", err)
+			return fiber.ErrInternalServerError
+		}
+
+		// 사용자 정보 반환
+		return c.JSON(GetMeResponse{
+			StudentID: studentID,
+			Name:      name,
+			Phone:     phone,
 		})
 	}
 }
