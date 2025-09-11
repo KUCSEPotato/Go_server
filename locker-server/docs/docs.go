@@ -61,6 +61,58 @@ const docTemplate = `{
                 }
             }
         },
+        "/auth/login-or-register": {
+            "post": {
+                "description": "학번/이름/전화번호가 일치하는 사용자가 있으면 로그인, 없으면 자동으로 회원가입 후 로그인. Register와 Login 함수의 모든 기능 통합.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "로그인 또는 자동 회원가입 (통합 인증)",
+                "parameters": [
+                    {
+                        "description": "로그인/회원가입 정보",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.LoginRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "기존 사용자 로그인 성공",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.LoginResponse"
+                        }
+                    },
+                    "201": {
+                        "description": "새 사용자 회원가입 및 로그인 성공",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.LoginResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "invalid name length",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/auth/logout": {
             "post": {
                 "description": "현재 사용 중인 Access Token과 Refresh Token을 모두 무효화합니다.",
@@ -251,7 +303,6 @@ const docTemplate = `{
         },
         "/auth/register": {
             "post": {
-                "description": "새 사용자를 등록합니다. 학번은 중복될 수 없습니다. 전화번호란에는 숫자만 허용합니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -261,7 +312,6 @@ const docTemplate = `{
                 "tags": [
                     "auth"
                 ],
-                "summary": "회원가입",
                 "parameters": [
                     {
                         "description": "회원가입 정보",

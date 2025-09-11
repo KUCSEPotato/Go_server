@@ -3,9 +3,12 @@ package handlers
 import (
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/binary"
+	"fmt" // 추가
 	"log"
 	"net"
 	"regexp"
+	"strings" // 추가
 	"time"
 
 	"github.com/KUCSEPotato/locker-server/internal/util"
@@ -72,10 +75,171 @@ type GetMeResponse struct {
 	Phone     string `json:"phone_number"`
 }
 
-// Register 핸들러: 새 사용자 등록 (학번/이름/전화번호)
-// Register godoc
-// @Summary      회원가입
-// @Description  새 사용자를 등록합니다. 학번은 중복될 수 없습니다. 전화번호란에는 숫자만 허용합니다.
+// LoginOrRegisterResponse is the response returned by LoginOrRegister handler
+type LoginOrRegisterRequest struct {
+	StudentID string `json:"student_id"`
+	Name      string `json:"name"`
+	Phone     string `json:"phone_number"`
+}
+
+// LoginOrRegisterResponse is the response returned by LoginOrRegister handler
+type LoginOrRegisterResponse struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	SerialID     int    `json:"serial_id"`
+}
+
+/*
+-- users 테이블에 custom_serial 컬럼이 없다면 추가
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS custom_serial BIGINT;
+
+-- (권장) 동일인 판정 유니크 키: 완전 일치(학번, 이름, 전화번호)
+CREATE UNIQUE INDEX IF NOT EXISTS ux_users_ident
+  ON users (student_id, name, phone_number);
+
+-- (선택) 조회 최적화
+CREATE INDEX IF NOT EXISTS ix_users_custom_serial ON users(custom_serial);
+*/
+
+// LoginOrRegister godoc
+// @Summary      로그인 또는 자동 회원가입 (통합 인증)
+// @Description  학번/이름/전화번호가 일치하면 로그인, 불일치하면 새로 회원가입 후 로그인.
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        payload body LoginOrRegisterRequest true "로그인/회원가입 정보"
+// @Success      200 {object} LoginOrRegisterResponse "기존 사용자 로그인 성공"
+// @Success      201 {object} LoginOrRegisterResponse "새 사용자 회원가입 및 로그인 성공"
+// @Failure      400 {object} ErrorResponse "missing required fields: student_id, name, phone_number"
+// @Failure      400 {object} ErrorResponse "invalid student_id format"
+// @Failure      400 {object} ErrorResponse "invalid phone_number format"
+// @Failure      400 {object} ErrorResponse "only numeric characters are allowed in phone_number"
+// @Failure      400 {object} ErrorResponse "invalid name length"
+// @Failure      500 {object} ErrorResponse "internal server error"
+// @Router       /auth/login-or-register [post]
+func LoginOrRegister(d Deps) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		// 1) 요청 파싱
+		var req LoginOrRegisterRequest
+		if err := c.BodyParser(&req); err != nil {
+			return fiber.ErrBadRequest
+		}
+		req.StudentID = strings.TrimSpace(req.StudentID)
+		req.Name = strings.TrimSpace(req.Name)
+		req.Phone = strings.TrimSpace(req.Phone)
+
+		// 2) 기본 검증
+		if req.StudentID == "" || req.Name == "" || req.Phone == "" {
+			return fiber.NewError(fiber.StatusBadRequest, "missing required fields: student_id, name, phone_number")
+		}
+		if ok := regexp.MustCompile(`^\d{10}$`).MatchString(req.StudentID); !ok {
+			return fiber.NewError(fiber.StatusBadRequest, "invalid student_id format")
+		}
+		if len(req.Phone) < 10 || len(req.Phone) > 15 {
+			return fiber.NewError(fiber.StatusBadRequest, "invalid phone_number format")
+		}
+		if ok := regexp.MustCompile(`^\d+$`).MatchString(req.Phone); !ok {
+			return fiber.NewError(fiber.StatusBadRequest, "only numeric characters are allowed in phone_number")
+		}
+		if l := len([]rune(req.Name)); l < 2 || l > 20 {
+			return fiber.NewError(fiber.StatusBadRequest, "invalid name length")
+		}
+
+		// 3) 커스텀 일련번호 생성 (학번+전화번호+salt → SHA256 → 12자리 숫자)
+		customSerial, err := generateCustomSerial(req.StudentID, req.Phone)
+		if err != nil {
+			log.Printf("GenerateCustomSerial failed: %v", err)
+			return fiber.ErrInternalServerError
+		}
+
+		// 4) 원자적 UPSERT: (student_id, name, phone_number) 유니크 기준
+		//    - 새 레코드면 201, 기존이면 200
+		var (
+			serialID int
+			inserted bool
+		)
+		err = d.DB.QueryRow(c.Context(), `
+			INSERT INTO users (student_id, name, phone_number, custom_serial, created_at)
+			VALUES ($1, $2, $3, $4, now())
+			ON CONFLICT (student_id, name, phone_number)
+			DO UPDATE SET
+				-- 필요 시 최신 전화번호/이름/커스텀 시리얼을 동기화하고 싶다면 아래를 조정
+				custom_serial = EXCLUDED.custom_serial
+			RETURNING id, (xmax = 0) AS inserted
+		`, req.StudentID, req.Name, req.Phone, customSerial).Scan(&serialID, &inserted)
+		if err != nil {
+			log.Printf("LoginOrRegister: upsert users failed: %v", err)
+			return fiber.ErrInternalServerError
+		}
+
+		statusCode := fiber.StatusOK
+		if inserted {
+			statusCode = fiber.StatusCreated
+			log.Printf("New user registered: student_id=%s, name=%s", req.StudentID, req.Name)
+		} else {
+			log.Printf("Existing user logged in: student_id=%s", req.StudentID)
+		}
+
+		// 5) Access/Refresh 토큰 발급
+		accessToken, err := util.IssueAccessToken(req.StudentID)
+		if err != nil {
+			log.Printf("LoginOrRegister: failed to issue access token for student_id=%s: %v", req.StudentID, err)
+			return fiber.ErrInternalServerError
+		}
+
+		refreshPlain := util.RandomToken(32)
+		refreshHash := sha256.Sum256([]byte(refreshPlain))
+		hashB64 := base64.RawURLEncoding.EncodeToString(refreshHash[:])
+
+		userAgent := string(c.Request().Header.UserAgent())
+		clientIPAddr := clientIP(c)
+		refreshExpires := time.Now().Add(time.Hour * time.Duration(util.EnvInt("JWT_REFRESH_TTL_H", 336)))
+
+		_, err = d.DB.Exec(c.Context(), `
+			INSERT INTO auth_refresh_tokens (student_id, token_hash, expires_at, user_agent, ip)
+			VALUES ($1, $2, $3, $4, $5)
+			ON CONFLICT (token_hash) DO NOTHING
+		`, req.StudentID, hashB64, refreshExpires, userAgent, clientIPAddr)
+		if err != nil {
+			log.Printf("LoginOrRegister: failed to store refresh token for student_id=%s: %v", req.StudentID, err)
+			return fiber.ErrInternalServerError
+		}
+
+		// 6) 응답
+		return c.Status(statusCode).JSON(LoginOrRegisterResponse{
+			AccessToken:  accessToken,
+			RefreshToken: refreshPlain, // 평문은 이 한 번만 반환
+			SerialID:     serialID,     // DB PK (자동 증가)
+		})
+	}
+}
+
+// ───────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ───────────────────────────────────────────────────────────────────────────────
+
+// generateCustomSerial
+// 학번 + 전화번호 + "ku_info" 를 입력으로 SHA256 해시 → 상위 8바이트를 숫자로 변환 → 12자리로 축소(모듈러)
+func generateCustomSerial(studentID, phone string) (int64, error) {
+	id := strings.TrimSpace(studentID)
+	pn := strings.TrimSpace(phone)
+	if id == "" || pn == "" {
+		return 0, fmt.Errorf("invalid studentID or phone")
+	}
+	const salt = "ku_info"
+	input := id + pn + salt
+	sum := sha256.Sum256([]byte(input))
+
+	// 앞 8바이트 → uint64
+	u := binary.BigEndian.Uint64(sum[:8])
+
+	// 12자리 숫자로 축소 (0 ~ 999,999,999,999)
+	const base uint64 = 1_000_000_000_000
+	num := u % base
+	return int64(num), nil
+}
+
 // @Tags         auth
 // @Accept       json
 // @Produce      json
