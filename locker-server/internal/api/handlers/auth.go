@@ -13,6 +13,7 @@ import (
 
 	"github.com/KUCSEPotato/locker-server/internal/util"
 	"github.com/gofiber/fiber/v2"
+	"github.com/golang-jwt/jwt/v4"
 	"github.com/jackc/pgx/v5"         // ErrNoRows 등 에러 타입 사용
 	"github.com/jackc/pgx/v5/pgxpool" // 커넥션 풀
 	"github.com/redis/go-redis/v9"    // 의존성 주입 구조체에 포함 (여기선 직접 사용X)
@@ -596,11 +597,10 @@ func clientIP(c *fiber.Ctx) string {
 // @Router       /auth/logout [post]
 func Logout(d Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		// 1) 요청에서 Access Token과 Refresh Token 추출
 		var req LogoutRequest
-		_ = c.BodyParser(&req) // 에러 무시 (선택적)
+		_ = c.BodyParser(&req)
 
-		// Access Token 추출 (Authorization 헤더 우선, 없으면 body에서)
+		// 1) Access Token 추출 (헤더 우선)
 		var accessToken string
 		authHeader := c.Get("Authorization")
 		if authHeader != "" && len(authHeader) > 7 && authHeader[:7] == "Bearer " {
@@ -609,45 +609,96 @@ func Logout(d Deps) fiber.Handler {
 			accessToken = req.AccessToken
 		}
 
-		// 2) Access Token을 블랙리스트에 추가
+		var tokenSub string
+		var parsedJTI string
+		var parsedExp time.Time
+
+		// 2) access token 블랙리스트 처리 (best-effort)
 		if accessToken != "" {
-			if jti, err := util.ExtractJTI(accessToken); err == nil {
-				// Redis에 JTI를 블랙리스트로 저장
-				ttlMin := util.EnvInt("JWT_ACCESS_TTL_MIN", 10)
-				blacklistKey := "blacklist:" + jti
-				_, err := d.RDB.Set(c.Context(), blacklistKey, "revoked", time.Duration(ttlMin)*time.Minute).Result()
+			// ParseUnverified로 exp/jti/sub 읽기(서명 검증 없이)
+			if tok, _, err := new(jwt.Parser).ParseUnverified(accessToken, jwt.MapClaims{}); err == nil {
+				if claims, ok := tok.Claims.(jwt.MapClaims); ok {
+					if j, ok := claims["jti"].(string); ok && j != "" {
+						parsedJTI = j
+					}
+					if s, ok := claims["sub"].(string); ok && s != "" {
+						tokenSub = s
+					}
+					if e, ok := claims["exp"].(float64); ok && e > 0 {
+						parsedExp = time.Unix(int64(e), 0)
+					}
+				}
+			}
+
+			// TTL 계산: exp가 있으면 exp까지, 없으면 기본 TTL 사용
+			var ttl time.Duration
+			if !parsedExp.IsZero() {
+				ttl = time.Until(parsedExp)
+			}
+			if ttl <= 0 {
+				// fallback: 기본 TTL (환경변수, 분 단위)
+				ttl = time.Duration(util.EnvInt("JWT_ACCESS_TTL_MIN", 10)) * time.Minute
+			}
+
+			ctx := c.Context()
+			if parsedJTI != "" {
+				_, err := d.RDB.Set(ctx, "blacklist:"+parsedJTI, "revoked", ttl).Result()
 				if err != nil {
-					log.Printf("Failed to blacklist access token: %v", err)
+					log.Printf("Logout: failed to set access jti blacklist: %v", err)
 				} else {
-					log.Printf("Access token blacklisted during logout: %s", jti)
+					log.Printf("Logout: blacklisted access jti=%s", parsedJTI)
+				}
+			} else {
+				// jti가 없으면 토큰 해시로 블랙리스트
+				h := sha256.Sum256([]byte(accessToken))
+				key := "blacklist:token:" + base64.RawURLEncoding.EncodeToString(h[:])
+				_, err := d.RDB.Set(ctx, key, "revoked", ttl).Result()
+				if err != nil {
+					log.Printf("Logout: failed to set access token-hash blacklist: %v", err)
+				} else {
+					log.Printf("Logout: blacklisted access token-hash key=%s", key)
 				}
 			}
 		}
 
-		// 3) Refresh Token 무효화 (DB에서 revoke)
+		// 3) Refresh token revoke 처리
 		if req.RefreshToken != "" {
-			// 평문 refresh → SHA256 → base64url
 			hash := sha256.Sum256([]byte(req.RefreshToken))
 			hashB64 := base64.RawURLEncoding.EncodeToString(hash[:])
 
-			// DB에서 해당 refresh token을 revoke
 			result, err := d.DB.Exec(c.Context(),
 				`UPDATE auth_refresh_tokens
-				 SET revoked_at = now()
-				 WHERE token_hash = $1 AND revoked_at IS NULL`,
+                 SET revoked_at = now()
+                 WHERE token_hash = $1 AND revoked_at IS NULL`,
 				hashB64,
 			)
 			if err != nil {
-				log.Printf("Failed to revoke refresh token: %v", err)
+				log.Printf("Logout: failed to revoke refresh token by hash: %v", err)
 			} else {
-				rowsAffected := result.RowsAffected()
-				if rowsAffected > 0 {
-					log.Printf("Refresh token revoked during logout")
+				if result.RowsAffected() > 0 {
+					// (옵션) Redis에 저장된 refresh 키 삭제 시도 (기존 구현과 호환)
+					_, _ = d.RDB.Del(c.Context(), "refresh_token:"+req.RefreshToken).Result()
+					log.Printf("Logout: revoked refresh token by hash")
 				}
 			}
+		} else if tokenSub != "" {
+			// refresh 토큰이 없으면 access token의 sub가 있다면 해당 사용자의 모든 refresh 토큰을 revoke (best-effort)
+			result, err := d.DB.Exec(c.Context(),
+				`UPDATE auth_refresh_tokens
+                 SET revoked_at = now()
+                 WHERE student_id = $1 AND revoked_at IS NULL`,
+				tokenSub,
+			)
+			if err != nil {
+				log.Printf("Logout: failed to revoke refresh tokens for user %s: %v", tokenSub, err)
+			} else {
+				log.Printf("Logout: revoked %d refresh tokens for user %s", result.RowsAffected(), tokenSub)
+			}
+		} else {
+			// 둘 다 없으면 best-effort: nothing to revoke
+			log.Printf("Logout: no refresh token provided and no subject found in access token")
 		}
 
-		// 4) 성공 응답
 		return c.JSON(LogoutResponse{
 			Message: "logged out successfully",
 		})
