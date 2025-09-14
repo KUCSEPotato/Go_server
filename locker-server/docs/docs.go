@@ -15,52 +15,6 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
-        "/auth/login": {
-            "post": {
-                "description": "일치하는 사용자가 있으면 Access/Refresh 토큰 발급, 전화번호란은 숫자만 허용",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "auth"
-                ],
-                "summary": "로그인 (학번/이름/전화번호 확인)",
-                "parameters": [
-                    {
-                        "description": "로그인 정보",
-                        "name": "payload",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/handlers.LoginRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/handlers.LoginResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "only numeric characters are allowed in phone_number",
-                        "schema": {
-                            "$ref": "#/definitions/handlers.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/handlers.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/auth/login-or-register": {
             "post": {
                 "description": "학번/이름/전화번호가 일치하면 로그인, 불일치하면 새로 회원가입 후 로그인.",
@@ -129,13 +83,13 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "default": "Bearer",
+                        "default": "Bearer ",
                         "description": "Bearer {access_token}",
                         "name": "Authorization",
                         "in": "header"
                     },
                     {
-                        "description": "로그아웃 정보 (선택적)",
+                        "description": "로그아웃 정보",
                         "name": "payload",
                         "in": "body",
                         "schema": {
@@ -165,45 +119,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/auth/logout-all": {
-            "post": {
-                "description": "현재 사용자의 모든 Refresh Token을 무효화하여 모든 디바이스에서 로그아웃합니다.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "auth"
-                ],
-                "summary": "전체 로그아웃 (모든 디바이스)",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "default": "Bearer",
-                        "description": "Bearer {access_token}",
-                        "name": "Authorization",
-                        "in": "header",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/handlers.LogoutResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/handlers.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/auth/me": {
             "get": {
                 "description": "JWT 토큰을 통해 인증된 현재 사용자의 학번, 이름, 전화번호를 반환합니다.",
@@ -220,7 +135,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "default": "Bearer",
+                        "default": "Bearer ",
                         "description": "Bearer {access_token}",
                         "name": "Authorization",
                         "in": "header",
@@ -301,50 +216,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/auth/register": {
-            "post": {
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "auth"
-                ],
-                "parameters": [
-                    {
-                        "description": "회원가입 정보",
-                        "name": "payload",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/handlers.RegisterRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "$ref": "#/definitions/handlers.RegisterResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "only numeric characters are allowed in phone_number",
-                        "schema": {
-                            "$ref": "#/definitions/handlers.ErrorResponse"
-                        }
-                    },
-                    "409": {
-                        "description": "student_id already exists",
-                        "schema": {
-                            "$ref": "#/definitions/handlers.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/health": {
             "get": {
                 "description": "서버 상태 확인 (DB, Redis 연결 상태 포함)",
@@ -396,7 +267,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "default": "Bearer",
+                        "default": "Bearer ",
                         "description": "Bearer {access_token}",
                         "name": "Authorization",
                         "in": "header",
@@ -441,7 +312,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "default": "Bearer",
+                        "default": "Bearer ",
                         "description": "Bearer {access_token}",
                         "name": "Authorization",
                         "in": "header",
@@ -486,7 +357,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "default": "Bearer",
+                        "default": "Bearer ",
                         "description": "Bearer {access_token}",
                         "name": "Authorization",
                         "in": "header",
@@ -553,7 +424,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "default": "Bearer",
+                        "default": "Bearer ",
                         "description": "Bearer {access_token}",
                         "name": "Authorization",
                         "in": "header",
@@ -626,7 +497,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "default": "Bearer",
+                        "default": "Bearer ",
                         "description": "Bearer {access_token}",
                         "name": "Authorization",
                         "in": "header",
@@ -693,7 +564,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "default": "Bearer",
+                        "default": "Bearer ",
                         "description": "Bearer {access_token}",
                         "name": "Authorization",
                         "in": "header",
@@ -887,31 +758,6 @@ const docTemplate = `{
                 }
             }
         },
-        "handlers.LoginRequest": {
-            "type": "object",
-            "properties": {
-                "name": {
-                    "type": "string"
-                },
-                "phone_number": {
-                    "type": "string"
-                },
-                "student_id": {
-                    "type": "string"
-                }
-            }
-        },
-        "handlers.LoginResponse": {
-            "type": "object",
-            "properties": {
-                "access_token": {
-                    "type": "string"
-                },
-                "refresh_token": {
-                    "type": "string"
-                }
-            }
-        },
         "handlers.LogoutRequest": {
             "type": "object",
             "properties": {
@@ -964,31 +810,6 @@ const docTemplate = `{
                 }
             }
         },
-        "handlers.RegisterRequest": {
-            "type": "object",
-            "properties": {
-                "name": {
-                    "type": "string"
-                },
-                "phone_number": {
-                    "type": "string"
-                },
-                "student_id": {
-                    "type": "string"
-                }
-            }
-        },
-        "handlers.RegisterResponse": {
-            "type": "object",
-            "properties": {
-                "message": {
-                    "type": "string"
-                },
-                "student_id": {
-                    "type": "string"
-                }
-            }
-        },
         "handlers.SimpleSuccessResponse": {
             "type": "object",
             "properties": {
@@ -1009,6 +830,10 @@ const docTemplate = `{
                 "phone_number": {
                     "type": "string",
                     "example": "01012345678"
+                },
+                "serial_id": {
+                    "type": "integer",
+                    "example": 123456789012
                 },
                 "student_id": {
                     "type": "string",

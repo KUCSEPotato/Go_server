@@ -1003,6 +1003,10 @@
                     "type": "string",
                     "example": "01012345678"
                 },
+                "serial_id": {
+                    "type": "integer",
+                    "example": 123456789012
+                },
                 "student_id": {
                     "type": "string",
                     "example": "2025320000"

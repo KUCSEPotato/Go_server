@@ -43,7 +43,7 @@ func GenerateTokens(studentID string) (string, string, error) {
 // IssueAccessToken: 학번(studentID)을 sub로 하는 HS256 JWS 발급
 // - iss/aud/iat/exp 등 표준 클레임을 채워 넣는다.
 // - 운영에서 비대칭(EdDSA)로 바꾸면 공개키 배포/JWKS 도입이 용이.
-func IssueAccessToken(studentID string) (string, error) {
+func IssueAccessToken(serialID int64, studentID string) (string, error) {
 	secret := []byte(os.Getenv("JWT_ACCESS_SECRET")) // 절대 유출 금지
 	iss := os.Getenv("JWT_ISS")                      // 발급자
 	aud := os.Getenv("JWT_AUD")                      // 대상
@@ -58,12 +58,13 @@ func IssueAccessToken(studentID string) (string, error) {
 
 	// JWT payload(클레임)
 	claims := jwt.MapClaims{
-		"sub": studentID,                                           // 누가(학번)
-		"iss": iss,                                                 // 누가 발급
-		"aud": aud,                                                 // 누구에게 유효
-		"iat": now.Unix(),                                          // 발급 시각
-		"exp": now.Add(time.Duration(ttlMin) * time.Minute).Unix(), // 만료 시각
-		"jti": RandomToken(16),                                     // JWT ID (블랙리스트용)
+		"sub":        fmt.Sprint(serialID),                               // 누가(고유 ID)
+		"student_id": studentID,                                         // 학번 (참고용)
+		"iss":        iss,                                                 // 누가 발급
+		"aud":        aud,                                                 // 누구에게 유효
+		"iat":        now.Unix(),                                          // 발급 시각
+		"exp":        now.Add(time.Duration(ttlMin) * time.Minute).Unix(), // 만료 시각
+		"jti":        RandomToken(16),                                     // JWT ID (블랙리스트용)
 	}
 
 	// 헤더의 alg는 HS256, typ는 JWT

@@ -81,7 +81,7 @@ type MyLockerResponse struct {
 func ListLockers(d Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		rows, err := d.DB.Query(c.Context(),
-			`SELECT l.locker_id, l.owner, ll.name
+			`SELECT l.locker_id, l.owner_student_id, ll.name
                FROM locker_info l
                JOIN locker_locations ll ON ll.location_id = l.location_id
                ORDER BY l.locker_id`)
@@ -102,7 +102,7 @@ func ListLockers(d Deps) fiber.Handler {
 		// 단일 응답에 사용 가능한 사물함 수 포함
 		var availableCount int
 		err = d.DB.QueryRow(c.Context(),
-			`SELECT COUNT(*) FROM locker_info WHERE owner IS NULL`).Scan(&availableCount)
+			`SELECT COUNT(*) FROM locker_info WHERE owner_serial_id IS NULL`).Scan(&availableCount)
 		if err != nil {
 			return fiber.ErrInternalServerError
 		}
@@ -154,9 +154,9 @@ func HoldLocker(d Deps) fiber.Handler {
 		// 해당 locker의 만료된 hold를 먼저 정리
 		scheduler.CheckAndCleanupExpiredHold(d.DB, d.RDB, id)
 
-		// JWT 미들웨어에서 저장한 학번(sub)
-		student, _ := c.Locals("student_id").(string)
-		if student == "" {
+		// JWT 미들웨어에서 저장한 serial_id
+		serialID, _ := c.Locals("user_serial_id").(int64)
+		if serialID == 0 {
 			return fiber.ErrUnauthorized
 		}
 
@@ -165,7 +165,7 @@ func HoldLocker(d Deps) fiber.Handler {
 
 		// SETNX: 키가 없을 때만 set + TTL(5분). true=성공(첫 클릭), false=이미 누군가 보유중
 		// [250908] 1분으로 변경 테스트
-		ok, err := d.RDB.SetNX(c.Context(), key, student, 1*time.Minute).Result()
+		ok, err := d.RDB.SetNX(c.Context(), key, serialID, 1*time.Minute).Result()
 		if err != nil {
 			// Redis 장애 → 503(Service Unavailable)
 			return fiber.ErrServiceUnavailable
@@ -178,9 +178,9 @@ func HoldLocker(d Deps) fiber.Handler {
 		// DB 히스토리 기록 (hold)
 		// * 유니크 인덱스가 마지막 안전망(한 locker/한 user당 활성 1건)
 		_, err = d.DB.Exec(c.Context(),
-			`INSERT INTO locker_assignments(locker_id, student_id, state, hold_expires_at)
+			`INSERT INTO locker_assignments(locker_id, user_serial_id, state, hold_expires_at)
 			 VALUES ($1,$2,'hold', now() + interval '5 minutes')`,
-			id, student)
+			id, serialID)
 		if err != nil {
 			// DB에서 막히면 Redis 키를 삭제(베스트 에포트)
 			_, _ = d.RDB.Del(c.Context(), key).Result()
@@ -190,7 +190,7 @@ func HoldLocker(d Deps) fiber.Handler {
 		// 성공 시 사물함 정보도 함께 반환
 		var lockerInfo LockerResponse
 		err = d.DB.QueryRow(c.Context(),
-			`SELECT l.locker_id, l.owner, ll.name
+			`SELECT l.locker_id, l.owner_student_id, ll.name
 			 FROM locker_info l
 			 JOIN locker_locations ll ON ll.location_id = l.location_id
 			 WHERE l.locker_id = $1`,
@@ -237,10 +237,11 @@ func ConfirmLocker(d Deps) fiber.Handler {
 		if err != nil {
 			return fiber.ErrBadRequest
 		}
-		student, _ := c.Locals("student_id").(string)
-		if student == "" {
+		serialID, _ := c.Locals("user_serial_id").(int64)
+		if serialID == 0 {
 			return fiber.ErrUnauthorized
 		}
+		studentID, _ := c.Locals("student_id").(string)
 
 		// 트랜잭션 시작
 		tx, err := d.DB.Begin(c.Context())
@@ -253,9 +254,9 @@ func ConfirmLocker(d Deps) fiber.Handler {
 		ct, err := tx.Exec(c.Context(),
 			`UPDATE locker_assignments
 			   SET state='confirmed', confirmed_at=now()
-			 WHERE locker_id=$1 AND student_id=$2
+			 WHERE locker_id=$1 AND user_serial_id=$2
 			   AND state='hold' AND (hold_expires_at IS NULL OR hold_expires_at > now())`,
-			id, student)
+			id, serialID)
 		if err != nil || ct.RowsAffected() == 0 {
 			// hold가 없거나 만료된 경우
 			return fiber.NewError(fiber.StatusConflict, "hold expired or not found")
@@ -263,7 +264,7 @@ func ConfirmLocker(d Deps) fiber.Handler {
 
 		// 2) locker_info.owner를 내 학번으로 설정
 		ct2, err := tx.Exec(c.Context(),
-			`UPDATE locker_info SET owner=$1 WHERE locker_id=$2 AND owner IS NULL`, student, id)
+			`UPDATE locker_info SET owner_serial_id=$1, owner_student_id=$2 WHERE locker_id=$3 AND owner_serial_id IS NULL`, serialID, studentID, id)
 		if err != nil || ct2.RowsAffected() == 0 {
 			// 소유자 업데이트 실패 → 충돌 처리
 			return fiber.ErrConflict
@@ -350,8 +351,8 @@ func ReleaseLocker(d Deps) fiber.Handler {
 		if err != nil {
 			return fiber.ErrBadRequest
 		}
-		student, _ := c.Locals("student_id").(string)
-		if student == "" {
+		serialID, _ := c.Locals("user_serial_id").(int64)
+		if serialID == 0 {
 			return fiber.ErrUnauthorized
 		}
 
@@ -366,8 +367,8 @@ func ReleaseLocker(d Deps) fiber.Handler {
 		ct, err := tx.Exec(c.Context(),
 			`UPDATE locker_assignments
 			   SET state='cancelled', released_at=now()
-			 WHERE locker_id=$1 AND student_id=$2 AND state='confirmed'`,
-			id, student)
+			 WHERE locker_id=$1 AND user_serial_id=$2 AND state='confirmed'`,
+			id, serialID)
 		if err != nil {
 			return fiber.ErrInternalServerError
 		}
@@ -377,8 +378,8 @@ func ReleaseLocker(d Deps) fiber.Handler {
 
 		// 2) locker_info.owner=NULL (내가 소유자인 경우에만)
 		ct, err = tx.Exec(c.Context(),
-			`UPDATE locker_info SET owner=NULL WHERE locker_id=$1 AND owner=$2`,
-			id, student)
+			`UPDATE locker_info SET owner_serial_id=NULL, owner_student_id=NULL WHERE locker_id=$1 AND owner_serial_id=$2`,
+			id, serialID)
 		if err != nil {
 			return fiber.ErrInternalServerError
 		}
@@ -388,8 +389,8 @@ func ReleaseLocker(d Deps) fiber.Handler {
 
 		// 3) Remove any lingering hold assignments
 		_, err = tx.Exec(c.Context(),
-			`DELETE FROM locker_assignments WHERE locker_id=$1 AND student_id=$2 AND state='hold'`,
-			id, student)
+			`DELETE FROM locker_assignments WHERE locker_id=$1 AND user_serial_id=$2 AND state='hold'`,
+			id, serialID)
 		if err != nil {
 			return fiber.ErrInternalServerError
 		}
@@ -430,8 +431,8 @@ func ReleaseHold(d Deps) fiber.Handler {
 		if err != nil {
 			return fiber.ErrBadRequest
 		}
-		student, _ := c.Locals("student_id").(string)
-		if student == "" {
+		serialID, _ := c.Locals("user_serial_id").(int64)
+		if serialID == 0 {
 			return fiber.ErrUnauthorized
 		}
 
@@ -444,8 +445,8 @@ func ReleaseHold(d Deps) fiber.Handler {
 
 		// hold 상태 해제
 		ct, err := tx.Exec(c.Context(),
-			`DELETE FROM locker_assignments WHERE locker_id=$1 AND student_id=$2 AND state='hold'`,
-			id, student)
+			`DELETE FROM locker_assignments WHERE locker_id=$1 AND user_serial_id=$2 AND state='hold'`,
+			id, serialID)
 		if err != nil {
 			return fiber.ErrInternalServerError
 		}
@@ -481,18 +482,18 @@ func ReleaseHold(d Deps) fiber.Handler {
 // @Router       /lockers/me [get]
 func GetMyLocker(d Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		student, _ := c.Locals("student_id").(string)
-		if student == "" {
+		serialID, _ := c.Locals("user_serial_id").(int64)
+		if serialID == 0 {
 			return fiber.ErrUnauthorized
 		}
 
 		var it LockerResponse
 		err := d.DB.QueryRow(c.Context(),
-			`SELECT l.locker_id, l.owner, ll.name
+			`SELECT l.locker_id, l.owner_student_id, ll.name
                FROM locker_info l
                JOIN locker_locations ll ON ll.location_id = l.location_id
-              WHERE l.owner = $1`,
-			student,
+              WHERE l.owner_serial_id = $1`,
+			serialID,
 		).Scan(&it.LockerID, &it.Owner, &it.LocationID)
 
 		if err != nil {

@@ -43,8 +43,8 @@ class QuickTest:
         try:
             async with aiohttp.ClientSession() as session:
                 # 로그인 테스트
-                async with session.post(f"{self.base_url}/api/v1/auth/login", json=self.test_user) as resp:
-                    if resp.status == 200:
+                async with session.post(f"{self.base_url}/api/v1/auth/login-or-register", json=self.test_user) as resp:
+                    if resp.status in [200, 201]:
                         result = await resp.json()
                         token = result.get("access_token")
                         if token:
@@ -212,10 +212,15 @@ async def main():
         await data_manager.connect_db()
         if data_manager.db_pool:
             async with data_manager.db_pool.acquire() as conn:
-                # 테스트 유저(홍길동)의 점유 해제
-                await conn.execute("UPDATE locker_info SET owner = NULL WHERE owner = '홍길동'")
-                await conn.execute("DELETE FROM locker_assignments WHERE student_id = '20231234'")
-                print("🔄 Cleared test user's locker assignments")
+                # 테스트 유저(홍길동)의 serial_id 조회
+                user_record = await conn.fetchrow("SELECT serial_id FROM users WHERE student_id = $1 AND name = $2", "20231234", "홍길동")
+                if user_record:
+                    user_serial_id = user_record['serial_id']
+                    # 테스트 유저(홍길동)의 점유 해제
+                    await conn.execute("UPDATE locker_info SET owner_serial_id = NULL, owner_student_id = NULL WHERE owner_serial_id = $1", user_serial_id)
+                    await conn.execute("DELETE FROM locker_assignments WHERE user_serial_id = $1", user_serial_id)
+                    print("🔄 Cleared test user's locker assignments")
+
     except Exception as e:
         print(f"⚠️ Could not clear test data: {e}")
     finally:
