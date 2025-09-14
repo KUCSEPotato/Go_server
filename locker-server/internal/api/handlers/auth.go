@@ -149,7 +149,7 @@ func LoginOrRegister(d Deps) fiber.Handler {
 		}
 
 		// 3) 커스텀 일련번호 생성 (학번+전화번호+salt → SHA256 → 12자리 숫자)
-		customSerial, err := generateCustomSerial(req.StudentID, req.Phone)
+		customSerial, err := generateCustomSerial(req.StudentID, req.Name, req.Phone)
 		if err != nil {
 			log.Printf("GenerateCustomSerial failed: %v", err)
 			return fiber.ErrInternalServerError
@@ -224,14 +224,15 @@ func LoginOrRegister(d Deps) fiber.Handler {
 
 // generateCustomSerial
 // 학번 + 전화번호 + "ku_info" 를 입력으로 SHA256 해시 → 상위 8바이트를 숫자로 변환 → 12자리로 축소(모듈러)
-func generateCustomSerial(studentID, phone string) (int64, error) {
+func generateCustomSerial(studentID, name, phone string) (int64, error) {
 	id := strings.TrimSpace(studentID)
+	nm := strings.TrimSpace(name)
 	pn := strings.TrimSpace(phone)
-	if id == "" || pn == "" {
-		return 0, fmt.Errorf("invalid studentID or phone")
+	if id == "" || nm == "" || pn == "" {
+		return 0, fmt.Errorf("invalid studentID or name or phone")
 	}
 	const salt = "ku_info"
-	input := id + pn + salt
+	input := id + nm + pn + salt
 	sum := sha256.Sum256([]byte(input))
 
 	// 앞 8바이트 → uint64
