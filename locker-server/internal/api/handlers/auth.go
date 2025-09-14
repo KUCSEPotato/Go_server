@@ -241,6 +241,7 @@ func generateCustomSerial(studentID, phone string) (int64, error) {
 	return int64(num), nil
 }
 
+/*
 // @Tags         auth
 // @Accept       json
 // @Produce      json
@@ -404,6 +405,7 @@ func Login(d Deps) fiber.Handler {
 		})
 	}
 }
+*/
 
 // Refresh 핸들러: refresh 토큰 평문을 받아서 DB의 해시와 비교 후, 새로운 Access 발급
 // Refresh godoc
@@ -590,7 +592,7 @@ func clientIP(c *fiber.Ctx) string {
 // @Accept       json
 // @Produce      json
 // @Param        Authorization header string false "Bearer {access_token}" default(Bearer )
-// @Param        payload body LogoutRequest false "로그아웃 정보 (선택적)"
+// @Param        payload body LogoutRequest false "로그아웃 정보"
 // @Success      200 {object} LogoutResponse
 // @Failure      400 {object} ErrorResponse
 // @Failure      401 {object} ErrorResponse
@@ -599,6 +601,12 @@ func Logout(d Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		var req LogoutRequest
 		_ = c.BodyParser(&req)
+
+		// 반드시 인증된 사용자만 로그아웃 가능하도록 변경
+		authenticatedStudent, ok := c.Locals("student_id").(string)
+		if !ok || authenticatedStudent == "" {
+			return fiber.ErrUnauthorized
+		}
 
 		// 1) Access Token 추출 (헤더 우선)
 		var accessToken string
@@ -630,13 +638,17 @@ func Logout(d Deps) fiber.Handler {
 				}
 			}
 
+			// 헤더 토큰의 sub가 인증된 사용자와 일치하는지 확인
+			if tokenSub != "" && tokenSub != authenticatedStudent {
+				return fiber.ErrUnauthorized
+			}
+
 			// TTL 계산: exp가 있으면 exp까지, 없으면 기본 TTL 사용
 			var ttl time.Duration
 			if !parsedExp.IsZero() {
 				ttl = time.Until(parsedExp)
 			}
 			if ttl <= 0 {
-				// fallback: 기본 TTL (환경변수, 분 단위)
 				ttl = time.Duration(util.EnvInt("JWT_ACCESS_TTL_MIN", 10)) * time.Minute
 			}
 
@@ -649,7 +661,6 @@ func Logout(d Deps) fiber.Handler {
 					log.Printf("Logout: blacklisted access jti=%s", parsedJTI)
 				}
 			} else {
-				// jti가 없으면 토큰 해시로 블랙리스트
 				h := sha256.Sum256([]byte(accessToken))
 				key := "blacklist:token:" + base64.RawURLEncoding.EncodeToString(h[:])
 				_, err := d.RDB.Set(ctx, key, "revoked", ttl).Result()
@@ -676,27 +687,23 @@ func Logout(d Deps) fiber.Handler {
 				log.Printf("Logout: failed to revoke refresh token by hash: %v", err)
 			} else {
 				if result.RowsAffected() > 0 {
-					// (옵션) Redis에 저장된 refresh 키 삭제 시도 (기존 구현과 호환)
 					_, _ = d.RDB.Del(c.Context(), "refresh_token:"+req.RefreshToken).Result()
 					log.Printf("Logout: revoked refresh token by hash")
 				}
 			}
-		} else if tokenSub != "" {
-			// refresh 토큰이 없으면 access token의 sub가 있다면 해당 사용자의 모든 refresh 토큰을 revoke (best-effort)
+		} else {
+			// refresh 토큰이 없으면 인증된 사용자의 모든 refresh 토큰을 revoke
 			result, err := d.DB.Exec(c.Context(),
 				`UPDATE auth_refresh_tokens
                  SET revoked_at = now()
                  WHERE student_id = $1 AND revoked_at IS NULL`,
-				tokenSub,
+				authenticatedStudent,
 			)
 			if err != nil {
-				log.Printf("Logout: failed to revoke refresh tokens for user %s: %v", tokenSub, err)
+				log.Printf("Logout: failed to revoke refresh tokens for user %s: %v", authenticatedStudent, err)
 			} else {
-				log.Printf("Logout: revoked %d refresh tokens for user %s", result.RowsAffected(), tokenSub)
+				log.Printf("Logout: revoked %d refresh tokens for user %s", result.RowsAffected(), authenticatedStudent)
 			}
-		} else {
-			// 둘 다 없으면 best-effort: nothing to revoke
-			log.Printf("Logout: no refresh token provided and no subject found in access token")
 		}
 
 		return c.JSON(LogoutResponse{
@@ -705,6 +712,7 @@ func Logout(d Deps) fiber.Handler {
 	}
 }
 
+/*
 // LogoutAll 핸들러: 해당 사용자의 모든 세션(모든 디바이스)을 무효화
 // LogoutAll godoc
 // @Summary      전체 로그아웃 (모든 디바이스)
@@ -759,7 +767,7 @@ func LogoutAll(d Deps) fiber.Handler {
 		})
 	}
 }
-
+*/
 /*
 [보안 팁]
 - Refresh 토큰은 탈취 시 심각한 위험 → https 쿠키(httponly/secure) 보관을 고려.
