@@ -72,7 +72,7 @@ func main() {
 	// 전역 미들웨어 장착
 	app.Use(
 		cors.New(cors.Config{
-			AllowOrigins: "http://localhost:3000, https://kucisc.kr",
+			AllowOrigins: "https://www.kucisc.kr, https://kucisc.kr",
 			AllowHeaders: "Origin, Content-Type, Accept, Authorization",
 			AllowMethods: "GET, POST, HEAD, PUT, DELETE, PATCH",
 		}),
