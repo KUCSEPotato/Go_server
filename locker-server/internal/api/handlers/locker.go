@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"database/sql"
 	"os"
 	"strconv"
 	"time"
@@ -29,9 +30,10 @@ func init() {
 
 // Locker Response
 type LockerResponse struct {
-	LockerID   int     `json:"locker_id"`
-	LocationID string  `json:"location_id"`
-	Owner      *string `json:"owner,omitempty"` // null 가능
+	LockerID      int     `json:"locker_id"`
+	LocationID    string  `json:"location_id"`
+	Owner         *string `json:"owner,omitempty"` // null 가능
+	OwnerSerialID *int64  `json:"owner_serial_id,omitempty"`
 	// RemainingCount int     `json:"remaining_count"` // 사용 가능한 사물함 수
 }
 
@@ -81,7 +83,7 @@ type MyLockerResponse struct {
 func ListLockers(d Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		rows, err := d.DB.Query(c.Context(),
-			`SELECT l.locker_id, l.owner_student_id, ll.name
+			`SELECT l.locker_id, l.owner_student_id, l.owner_serial_id, ll.name
                FROM locker_info l
                JOIN locker_locations ll ON ll.location_id = l.location_id
                ORDER BY l.locker_id`)
@@ -93,8 +95,15 @@ func ListLockers(d Deps) fiber.Handler {
 		var out []LockerResponse
 		for rows.Next() {
 			var it LockerResponse
-			if err := rows.Scan(&it.LockerID, &it.Owner, &it.LocationID); err != nil {
+			var ownerSerial sql.NullInt64
+			if err := rows.Scan(&it.LockerID, &it.Owner, &ownerSerial, &it.LocationID); err != nil {
 				return fiber.ErrInternalServerError
+			}
+			if ownerSerial.Valid {
+				v := ownerSerial.Int64
+				it.OwnerSerialID = &v
+			} else {
+				it.OwnerSerialID = nil
 			}
 			out = append(out, it)
 		}
