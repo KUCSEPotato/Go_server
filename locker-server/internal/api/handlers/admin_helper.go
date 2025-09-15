@@ -10,6 +10,7 @@ import (
 // User 유저 정보
 // @Description users 테이블의 한 레코드(민감정보 제외)
 type User struct {
+	SerialID    int64  `json:"serial_id" example:"1234567890"`
 	StudentID   string `json:"student_id" example:"2025320000"`
 	Name        string `json:"name"        example:"홍길동"`
 	PhoneNumber string `json:"phone_number" example:"01012345678"`
@@ -32,9 +33,9 @@ type ListUsersResponse struct {
 func GetAllUsersHandler(db *pgxpool.Pool) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		query := `
-			SELECT student_id, name, phone_number
+			SELECT serial_id, student_id, name, phone_number
 			FROM users
-			ORDER BY student_id ASC
+			ORDER BY serial_id ASC
 		`
 
 		rows, err := db.Query(context.Background(), query)
@@ -46,7 +47,7 @@ func GetAllUsersHandler(db *pgxpool.Pool) fiber.Handler {
 		var users []User
 		for rows.Next() {
 			var u User
-			if err := rows.Scan(&u.StudentID, &u.Name, &u.PhoneNumber); err != nil {
+			if err := rows.Scan(&u.SerialID, &u.StudentID, &u.Name, &u.PhoneNumber); err != nil {
 				return fiber.NewError(fiber.StatusInternalServerError, "failed to scan user row")
 			}
 			users = append(users, u)

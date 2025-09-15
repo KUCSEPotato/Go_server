@@ -149,7 +149,7 @@ func LoginOrRegister(d Deps) fiber.Handler {
 		}
 
 		// 3) 커스텀 일련번호 생성 (학번+전화번호+salt → SHA256 → 12자리 숫자)
-		customSerial, err := generateCustomSerial(req.StudentID, req.Phone)
+		customSerial, err := generateCustomSerial(req.StudentID, req.Name, req.Phone)
 		if err != nil {
 			log.Printf("GenerateCustomSerial failed: %v", err)
 			return fiber.ErrInternalServerError
@@ -158,7 +158,7 @@ func LoginOrRegister(d Deps) fiber.Handler {
 		// 4) 원자적 UPSERT: (student_id, name, phone_number) 유니크 기준
 		//    - 새 레코드면 201, 기존이면 200
 		var (
-			serialID int = int(customSerial)
+			serialID int64
 			inserted bool
 		)
 		err = d.DB.QueryRow(c.Context(), `
@@ -167,7 +167,8 @@ func LoginOrRegister(d Deps) fiber.Handler {
 			ON CONFLICT (student_id, name, phone_number)
 			DO UPDATE SET
     		name = EXCLUDED.name,
-    		phone_number = EXCLUDED.phone_number
+    		phone_number = EXCLUDED.phone_number,
+			updated_at = now()
 			RETURNING serial_id, (xmax = 0) AS inserted
 		`, req.StudentID, req.Name, req.Phone, customSerial).Scan(&serialID, &inserted)
 		if err != nil {
@@ -184,7 +185,7 @@ func LoginOrRegister(d Deps) fiber.Handler {
 		}
 
 		// 5) Access/Refresh 토큰 발급
-		accessToken, err := util.IssueAccessToken(req.StudentID)
+		accessToken, err := util.IssueAccessToken(serialID, req.StudentID)
 		if err != nil {
 			log.Printf("LoginOrRegister: failed to issue access token for student_id=%s: %v", req.StudentID, err)
 			return fiber.ErrInternalServerError
@@ -199,12 +200,12 @@ func LoginOrRegister(d Deps) fiber.Handler {
 		refreshExpires := time.Now().Add(time.Hour * time.Duration(util.EnvInt("JWT_REFRESH_TTL_H", 336)))
 
 		_, err = d.DB.Exec(c.Context(), `
-			INSERT INTO auth_refresh_tokens (student_id, token_hash, expires_at, user_agent, ip)
+			INSERT INTO auth_refresh_tokens (user_serial_id, token_hash, expires_at, user_agent, ip)
 			VALUES ($1, $2, $3, $4, $5)
 			ON CONFLICT (token_hash) DO NOTHING
-		`, req.StudentID, hashB64, refreshExpires, userAgent, clientIPAddr)
+		`, serialID, hashB64, refreshExpires, userAgent, clientIPAddr)
 		if err != nil {
-			log.Printf("LoginOrRegister: failed to store refresh token for student_id=%s: %v", req.StudentID, err)
+			log.Printf("LoginOrRegister: failed to store refresh token for user with serial_id=%d: %v", serialID, err)
 			return fiber.ErrInternalServerError
 		}
 
@@ -212,7 +213,7 @@ func LoginOrRegister(d Deps) fiber.Handler {
 		return c.Status(statusCode).JSON(LoginOrRegisterResponse{
 			AccessToken:  accessToken,
 			RefreshToken: refreshPlain, // 평문은 이 한 번만 반환
-			SerialID:     serialID,
+			SerialID:     int(serialID),
 		})
 	}
 }
@@ -223,14 +224,15 @@ func LoginOrRegister(d Deps) fiber.Handler {
 
 // generateCustomSerial
 // 학번 + 전화번호 + "ku_info" 를 입력으로 SHA256 해시 → 상위 8바이트를 숫자로 변환 → 12자리로 축소(모듈러)
-func generateCustomSerial(studentID, phone string) (int64, error) {
+func generateCustomSerial(studentID, name, phone string) (int64, error) {
 	id := strings.TrimSpace(studentID)
+	nm := strings.TrimSpace(name)
 	pn := strings.TrimSpace(phone)
-	if id == "" || pn == "" {
-		return 0, fmt.Errorf("invalid studentID or phone")
+	if id == "" || nm == "" || pn == "" {
+		return 0, fmt.Errorf("invalid studentID or name or phone")
 	}
 	const salt = "ku_info"
-	input := id + pn + salt
+	input := id + nm + pn + salt
 	sum := sha256.Sum256([]byte(input))
 
 	// 앞 8바이트 → uint64
@@ -449,9 +451,9 @@ func Refresh(d Deps) fiber.Handler {
 		hashB64 := base64.RawURLEncoding.EncodeToString(hash[:])
 
 		// 3) DB에서 유효한 리프레시인지 확인 (만료/회수 여부)
-		var sid string // student_id
+		var sid int64 // user_serial_id
 		err := d.DB.QueryRow(c.Context(),
-			`SELECT student_id FROM auth_refresh_tokens
+			`SELECT user_serial_id FROM auth_refresh_tokens
 			  WHERE token_hash=$1
 			    AND revoked_at IS NULL
 			    AND now() < expires_at`,
@@ -463,6 +465,14 @@ func Refresh(d Deps) fiber.Handler {
 				return fiber.ErrUnauthorized // 보안상 구체적인 에러 메시지는 반환하지 않음.
 			}
 			return fiber.ErrInternalServerError
+		}
+
+		// 3.2) serial_id로 student_id 조회
+		var studentID string
+		err = d.DB.QueryRow(c.Context(), `SELECT student_id FROM users WHERE serial_id = $1`, sid).Scan(&studentID)
+		if err != nil {
+			log.Printf("Refresh: could not find user with serial_id %d: %v", sid, err)
+			return fiber.ErrUnauthorized
 		}
 
 		// 보안적 측면에서 Refresh 토큰은 1회용으로 설계하는 것이 좋음.
@@ -489,7 +499,7 @@ func Refresh(d Deps) fiber.Handler {
 		}
 
 		// 4) 새 Access 발급
-		token, err := util.IssueAccessToken(sid)
+		token, err := util.IssueAccessToken(sid, studentID)
 		if err != nil {
 			return fiber.ErrInternalServerError
 		}
@@ -508,7 +518,7 @@ func Refresh(d Deps) fiber.Handler {
 
 		// 새 refresh token을 DB에 저장
 		_, err = d.DB.Exec(c.Context(),
-			`INSERT INTO auth_refresh_tokens(student_id, token_hash, expires_at, user_agent, ip)
+			`INSERT INTO auth_refresh_tokens(user_serial_id, token_hash, expires_at, user_agent, ip)
      		 VALUES ($1, $2, $3, $4, $5)
      		 ON CONFLICT (token_hash) DO NOTHING`,
 			sid, newHashB64, expires, ua, ip,
@@ -542,17 +552,17 @@ func Refresh(d Deps) fiber.Handler {
 func GetMe(d Deps) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		// JWT 미들웨어에서 저장한 학번(sub) - 이 핸들러는 인증이 필요함
-		studentID, ok := c.Locals("student_id").(string)
-		if !ok || studentID == "" {
+		serialID, ok := c.Locals("user_serial_id").(int64)
+		if !ok || serialID == 0 {
 			return fiber.ErrUnauthorized
 		}
 
 		// DB에서 해당 사용자 정보 조회
-		var name, phone string
+		var studentID, name, phone string
 		err := d.DB.QueryRow(c.Context(),
-			`SELECT name, phone_number FROM users WHERE student_id = $1 LIMIT 1`,
-			studentID,
-		).Scan(&name, &phone)
+			`SELECT student_id, name, phone_number FROM users WHERE serial_id = $1 LIMIT 1`,
+			serialID,
+		).Scan(&studentID, &name, &phone)
 
 		if err != nil {
 			if err == pgx.ErrNoRows {
@@ -607,10 +617,10 @@ func Logout(d Deps) fiber.Handler {
 		req.RefreshToken = strings.TrimSpace(req.RefreshToken)
 
 		// 미들웨어로부터 인증된 사용자 확인
-		authenticatedStudent, _ := c.Locals("student_id").(string)
+		authenticatedSerialID, _ := c.Locals("user_serial_id").(int64)
 
 		// 인증된 사용자도 없고 refresh token도 없으면 거부
-		if authenticatedStudent == "" && req.RefreshToken == "" {
+		if authenticatedSerialID == 0 && req.RefreshToken == "" {
 			return fiber.ErrUnauthorized
 		}
 
@@ -658,18 +668,18 @@ func Logout(d Deps) fiber.Handler {
 		}
 
 		// 3) refresh token 미제공이면서 인증된 사용자가 있으면 해당 사용자의 모든 refresh 토큰 revoke
-		if authenticatedStudent != "" {
+		if authenticatedSerialID != 0 {
 			tag, err := d.DB.Exec(c.Context(),
 				`UPDATE auth_refresh_tokens
                  SET revoked_at = now()
-                 WHERE student_id = $1 AND revoked_at IS NULL`,
-				authenticatedStudent,
+                 WHERE user_serial_id = $1 AND revoked_at IS NULL`,
+				authenticatedSerialID,
 			)
 			if err != nil {
-				log.Printf("Logout: failed to revoke refresh tokens for user %s: %v", authenticatedStudent, err)
+				log.Printf("Logout: failed to revoke refresh tokens for user %d: %v", authenticatedSerialID, err)
 				return fiber.ErrInternalServerError
 			}
-			log.Printf("Logout: revoked %d refresh tokens for user %s", tag.RowsAffected(), authenticatedStudent)
+			log.Printf("Logout: revoked %d refresh tokens for user %d", tag.RowsAffected(), authenticatedSerialID)
 			return c.JSON(LogoutResponse{Message: "logged out successfully"})
 		}
 

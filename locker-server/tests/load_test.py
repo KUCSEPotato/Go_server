@@ -100,7 +100,7 @@ class TestDataManager:
                 self.original_locker_assignments = [dict(row) for row in assignments]
                 
                 # 기존 locker_info 백업 (owner가 있는 것들만)
-                lockers = await conn.fetch("SELECT * FROM locker_info WHERE owner IS NOT NULL")
+                lockers = await conn.fetch("SELECT * FROM locker_info WHERE owner_serial_id IS NOT NULL")
                 self.original_locker_info = [dict(row) for row in lockers]
                 
                 # 기존 refresh_tokens 백업
@@ -131,12 +131,17 @@ class TestDataManager:
                     print("   ✅ Cleared all locker assignments")
                     
                     # 2. 모든 locker_info의 owner를 NULL로 설정 (점유 해제)
-                    result = await conn.execute("UPDATE locker_info SET owner = NULL WHERE owner IS NOT NULL")
+                    result = await conn.execute("UPDATE locker_info SET owner_serial_id = NULL, owner_student_id = NULL WHERE owner_serial_id IS NOT NULL")
                     freed_count = int(result.split()[-1])
                     print(f"   ✅ Freed {freed_count} occupied lockers")
                     
                     # 3. 테스트 사용자들의 refresh token 삭제 (TEST로 시작하는 student_id)
-                    await conn.execute("DELETE FROM auth_refresh_tokens WHERE student_id LIKE 'TEST%'")
+                    await conn.execute("""
+                        DELETE FROM auth_refresh_tokens
+                        WHERE user_serial_id IN (
+                            SELECT serial_id FROM users WHERE student_id LIKE 'TEST%'
+                        )
+                    """)
                     
                     # 4. 테스트 사용자 삭제 (TEST로 시작하는 student_id)
                     deleted_users = await conn.execute("DELETE FROM users WHERE student_id LIKE 'TEST%'")
@@ -245,6 +250,8 @@ class TestDataManager:
                     print(f"🔄 Creating {num_users - 2} temporary test users...")
                     
                     users_data = []
+                    # serial_id를 결정하기 위해 먼저 INSERT하고 serial_id를 가져와야 함.
+                    # 여기서는 간단하게 student_id기반으로 생성하고, 나중에 login할 때 serial_id를 얻음.
                     for i in range(2, num_users):  # 3번째부터 생성
                         student_id = f"TEST{i:04d}"  # TEST0002, TEST0003, ... 형식으로 생성
                         name = f"임시사용자{i:04d}"
@@ -263,7 +270,7 @@ class TestDataManager:
                     # 배치 삽입 (임시 사용자만)
                     if users_data:
                         await conn.executemany(
-                            "INSERT INTO users (student_id, name, phone_number, created_at, updated_at) VALUES ($1, $2, $3, NOW(), NOW())",
+                            "INSERT INTO users (student_id, name, phone_number, created_at, updated_at) VALUES ($1, $2, $3, NOW(), NOW()) ON CONFLICT DO NOTHING",
                             users_data
                         )
                         print(f"✅ Created {len(users_data)} temporary users for testing")
@@ -351,29 +358,28 @@ class TestDataManager:
                     
                     # 1. 임시 사용자들과 관련된 모든 데이터 삭제
                     if self.created_users:
-                        # 임시 사용자들의 refresh token 삭제
-                        await conn.execute(
-                            "DELETE FROM auth_refresh_tokens WHERE student_id = ANY($1)",
-                            self.created_users
-                        )
-                        
-                        # 임시 사용자들의 사물함 할당 기록 삭제
-                        await conn.execute(
-                            "DELETE FROM locker_assignments WHERE student_id = ANY($1)",
-                            self.created_users
-                        )
-                        
-                        # 임시 사용자들이 소유한 사물함 해제
-                        await conn.execute(
-                            "UPDATE locker_info SET owner = NULL WHERE owner = ANY($1)",
-                            self.created_users
-                        )
-                        
-                        # 임시 사용자들의 refresh token 먼저 삭제
-                        await conn.execute(
-                            "DELETE FROM auth_refresh_tokens WHERE student_id = ANY($1)",
-                            self.created_users
-                        )
+                        # 임시 사용자들의 serial_id 조회
+                        user_records = await conn.fetch("SELECT serial_id FROM users WHERE student_id = ANY($1)", self.created_users)
+                        user_serial_ids = [r['serial_id'] for r in user_records]
+
+                        if user_serial_ids:
+                            # 임시 사용자들의 refresh token 삭제
+                            await conn.execute(
+                                "DELETE FROM auth_refresh_tokens WHERE user_serial_id = ANY($1)",
+                                user_serial_ids
+                            )
+                            
+                            # 임시 사용자들의 사물함 할당 기록 삭제
+                            await conn.execute(
+                                "DELETE FROM locker_assignments WHERE user_serial_id = ANY($1)",
+                                user_serial_ids
+                            )
+                            
+                            # 임시 사용자들이 소유한 사물함 해제
+                            await conn.execute(
+                                "UPDATE locker_info SET owner_serial_id = NULL, owner_student_id = NULL WHERE owner_serial_id = ANY($1)",
+                                user_serial_ids
+                            )
                         
                         # 임시 사용자들 삭제
                         await conn.execute(
@@ -381,7 +387,7 @@ class TestDataManager:
                             self.created_users
                         )
                         
-                        print(f"🗑️ Deleted {len(self.created_users)} temporary users")
+                        print(f"🗑️ Deleted {len(self.created_users)} temporary users and their data")
                     
                     # 2. 테스트로 생성된 사물함 삭제
                     if self.created_lockers:
@@ -393,22 +399,28 @@ class TestDataManager:
                         print(f"🗑️ Deleted {len(locker_ids)} test lockers")
                     
                     # 3. 원본 사용자들의 상태 초기화 (깨끗한 상태로)
-                    await conn.execute(
-                        "DELETE FROM auth_refresh_tokens WHERE student_id IN ('20231234', '20231235')"
-                    )
-                    await conn.execute(
-                        "DELETE FROM locker_assignments WHERE student_id IN ('20231234', '20231235')"
-                    )
-                    await conn.execute(
-                        "UPDATE locker_info SET owner = NULL WHERE owner IN ('20231234', '20231235')"
-                    )
+                    original_user_records = await conn.fetch("SELECT serial_id FROM users WHERE student_id IN ('20231234', '20231235')")
+                    original_user_serial_ids = [r['serial_id'] for r in original_user_records]
+                    if original_user_serial_ids:
+                        await conn.execute(
+                            "DELETE FROM auth_refresh_tokens WHERE user_serial_id = ANY($1)",
+                            original_user_serial_ids
+                        )
+                        await conn.execute(
+                            "DELETE FROM locker_assignments WHERE user_serial_id = ANY($1)",
+                            original_user_serial_ids
+                        )
+                        await conn.execute(
+                            "UPDATE locker_info SET owner_serial_id = NULL, owner_student_id = NULL WHERE owner_serial_id = ANY($1)",
+                            original_user_serial_ids
+                        )
                     
                     # 4. 모든 사물함의 점유 상태 완전 초기화 (혹시 남아있는 다른 점유 상태도 정리)
-                    all_owned_result = await conn.fetch("SELECT COUNT(*) as count FROM locker_info WHERE owner IS NOT NULL")
+                    all_owned_result = await conn.fetch("SELECT COUNT(*) as count FROM locker_info WHERE owner_serial_id IS NOT NULL")
                     owned_count = all_owned_result[0]['count'] if all_owned_result else 0
                     
                     if owned_count > 0:
-                        await conn.execute("UPDATE locker_info SET owner = NULL WHERE owner IS NOT NULL")
+                        await conn.execute("UPDATE locker_info SET owner_serial_id = NULL, owner_student_id = NULL WHERE owner_serial_id IS NOT NULL")
                         print(f"🧹 Released {owned_count} additional occupied lockers")
                     
                     # 5. 모든 사물함 할당 기록 정리 (테스트 중 생성된 할당 기록들)
@@ -448,7 +460,7 @@ class TestDataManager:
                     # 1. 모든 테스트 데이터 삭제
                     await conn.execute("DELETE FROM auth_refresh_tokens")
                     await conn.execute("DELETE FROM locker_assignments")
-                    await conn.execute("UPDATE locker_info SET owner = NULL")
+                    await conn.execute("UPDATE locker_info SET owner_serial_id = NULL, owner_student_id = NULL")
                     await conn.execute("DELETE FROM users WHERE student_id LIKE 'TEST%'")
                     await conn.execute("DELETE FROM locker_info WHERE locker_id >= 9000")
                     
@@ -465,8 +477,8 @@ class TestDataManager:
                     if hasattr(self, 'original_locker_info') and self.original_locker_info:
                         for locker in self.original_locker_info:
                             await conn.execute(
-                                "UPDATE locker_info SET owner = $1 WHERE locker_id = $2",
-                                locker['owner'], locker['locker_id']
+                                "UPDATE locker_info SET owner_serial_id = $1, owner_student_id = $2 WHERE locker_id = $3",
+                                locker['owner_serial_id'], locker['owner_student_id'], locker['locker_id']
                             )
                         print(f"✅ Restored {len(self.original_locker_info)} original locker occupancies")
                     
@@ -474,8 +486,8 @@ class TestDataManager:
                     if hasattr(self, 'original_locker_assignments') and self.original_locker_assignments:
                         for assignment in self.original_locker_assignments:
                             await conn.execute(
-                                "INSERT INTO locker_assignments (student_id, locker_id, assigned_at) VALUES ($1, $2, $3)",
-                                assignment['student_id'], assignment['locker_id'], assignment['assigned_at']
+                                "INSERT INTO locker_assignments (user_serial_id, locker_id, assigned_at) VALUES ($1, $2, $3)",
+                                assignment['user_serial_id'], assignment['locker_id'], assignment['assigned_at']
                             )
                         print(f"✅ Restored {len(self.original_locker_assignments)} original locker assignments")
                     
@@ -483,8 +495,8 @@ class TestDataManager:
                     if hasattr(self, 'original_refresh_tokens') and self.original_refresh_tokens:
                         for token in self.original_refresh_tokens:
                             await conn.execute(
-                                "INSERT INTO auth_refresh_tokens (student_id, refresh_token, expires_at) VALUES ($1, $2, $3)",
-                                token['student_id'], token['refresh_token'], token['expires_at']
+                                "INSERT INTO auth_refresh_tokens (user_serial_id, refresh_token, expires_at) VALUES ($1, $2, $3)",
+                                token['user_serial_id'], token['refresh_token'], token['expires_at']
                             )
                         print(f"✅ Restored {len(self.original_refresh_tokens)} original refresh tokens")
                     
@@ -542,19 +554,19 @@ class LoadTester:
         start_time = time.time()
         try:
             async with session.post(
-                f"{self.base_url}/api/v1/auth/login",
+                f"{self.base_url}/api/v1/auth/login-or-register",
                 json=login_data,
                 timeout=aiohttp.ClientTimeout(total=30)
             ) as response:
                 response_time = time.time() - start_time
                 
-                if response.status == 200:
+                if response.status in [200, 201]:
                     data = await response.json()
                     self.results.append(TestResult(
                         success=True,
                         status_code=response.status,
                         response_time=response_time,
-                        endpoint="POST /auth/login"
+                        endpoint="POST /auth/login-or-register"
                     ))
                     return data
                 else:
@@ -562,7 +574,7 @@ class LoadTester:
                         success=False,
                         status_code=response.status,
                         response_time=response_time,
-                        endpoint="POST /auth/login",
+                        endpoint="POST /auth/login-or-register",
                         error_message=f"Login failed: {response.status}"
                     ))
                     return None
@@ -573,7 +585,7 @@ class LoadTester:
                 success=False,
                 status_code=0,
                 response_time=response_time,
-                endpoint="POST /auth/login",
+                endpoint="POST /auth/login-or-register",
                 error_message=str(e)
             ))
             return None
@@ -760,13 +772,13 @@ class LoadTester:
                     if my_locker is not None:
                         # GetMyLocker 핸들러의 LockerResponse 구조에 맞게 수정
                         actual_locker_id = my_locker.get("locker_id")  # "id" 대신 "locker_id"
-                        actual_owner = my_locker.get("owner")          # "user_id" 대신 "owner"
+                        actual_owner_student_id = my_locker.get("owner") # "owner" 필드는 이제 student_id
                         
                         # 예상한 사물함 ID와 일치하는지 확인
                         is_correct_locker = actual_locker_id == locker_id
-                        is_correct_owner = actual_owner == expected_student_id
+                        is_correct_owner = actual_owner_student_id == expected_student_id
                         
-                        return is_correct_locker and is_correct_owner, actual_owner, actual_locker_id
+                        return is_correct_locker and is_correct_owner, actual_owner_student_id, actual_locker_id
                     else:
                         # 사물함을 소유하지 않음
                         return False, None, None
@@ -802,11 +814,12 @@ class LoadTester:
             return
             
         access_token = auth_data.get("access_token")
+        serial_id = auth_data.get("serial_id")
         if not access_token:
             print(f"User {user_id}: No access token")
             return
             
-        print(f"User {user_id}: Login successful")
+        print(f"User {user_id} (serial: {serial_id}): Login successful")
         
         # 2. 사물함 목록 조회
         lockers = await self.get_lockers(session, access_token)
@@ -848,9 +861,9 @@ class LoadTester:
                 # 6.1 확정 후 소유권 검증
                 if hasattr(self, 'test_users') and self.test_users and user_id < len(self.test_users):
                     expected_student_id = self.test_users[user_id]["student_id"]
-                    is_correct_owner, actual_owner, actual_locker_id = await self.verify_locker_ownership(session, access_token, locker_id, expected_student_id)
+                    is_correct_owner, actual_owner_student_id, actual_locker_id = await self.verify_locker_ownership(session, access_token, locker_id, expected_student_id)
                     
-                    if is_correct_owner is not False and actual_owner is not None:
+                    if is_correct_owner is not False and actual_owner_student_id is not None:
                         if is_correct_owner:
                             print(f"User {user_id}: ✅ Final ownership confirmed for locker {actual_locker_id} (expected: {locker_id})")
                             self.ownership_verifications["hold_verifications"]["correct"] += 1

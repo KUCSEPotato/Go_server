@@ -3,6 +3,7 @@ package middleware
 import (
 	"log"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/KUCSEPotato/locker-server/internal/util"
@@ -78,13 +79,22 @@ func JWTAuth(d Deps) fiber.Handler {
 			return fiber.ErrUnauthorized
 		}
 
-		// sub(주체) = 학번. 핸들러에서 c.Locals("student_id")로 꺼내씀.
+		// sub(주체) = serial_id. 핸들러에서 c.Locals("user_serial_id")로 꺼내씀.
 		sub, _ := claims["sub"].(string)
 		if sub == "" {
-			log.Print("Missing student_id claim")
+			log.Print("Missing sub claim")
 			return fiber.ErrUnauthorized
 		}
-		c.Locals("student_id", sub)
+		serialID, err := strconv.ParseInt(sub, 10, 64)
+		if err != nil {
+			log.Print("Invalid sub claim (not an int64)")
+			return fiber.ErrUnauthorized
+		}
+		c.Locals("user_serial_id", serialID)
+
+		// student_id는 참고용으로만.
+		studentID, _ := claims["student_id"].(string)
+		c.Locals("student_id", studentID)
 
 		// 다음 미들웨어/핸들러 실행
 		return c.Next()

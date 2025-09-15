@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/cors"
 	// logger: HTTP 요청/응답을 콘솔에 기록하는 미들웨어 (개발 시 매우 유용)
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	// recover: 핸들러 내부에서 panic이 나도 서버가 죽지 않게 막아주는 미들웨어
@@ -70,6 +71,11 @@ func main() {
 
 	// 전역 미들웨어 장착
 	app.Use(
+		cors.New(cors.Config{
+			AllowOrigins: "https://www.kucisc.kr, https://kucisc.kr",
+			AllowHeaders: "Origin, Content-Type, Accept, Authorization",
+			AllowMethods: "GET, POST, HEAD, PUT, DELETE, PATCH",
+		}),
 		logger.New(),  // 요청 로그 출력
 		recover.New(), // panic 복구
 	)
