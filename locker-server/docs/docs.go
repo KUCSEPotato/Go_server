@@ -83,7 +83,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "default": "Bearer ",
+                        "default": "Bearer",
                         "description": "Bearer {access_token}",
                         "name": "Authorization",
                         "in": "header"
@@ -135,7 +135,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "default": "Bearer ",
+                        "default": "Bearer",
                         "description": "Bearer {access_token}",
                         "name": "Authorization",
                         "in": "header",
@@ -267,7 +267,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "default": "Bearer ",
+                        "default": "Bearer",
                         "description": "Bearer {access_token}",
                         "name": "Authorization",
                         "in": "header",
@@ -312,7 +312,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "default": "Bearer ",
+                        "default": "Bearer",
                         "description": "Bearer {access_token}",
                         "name": "Authorization",
                         "in": "header",
@@ -357,7 +357,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "default": "Bearer ",
+                        "default": "Bearer",
                         "description": "Bearer {access_token}",
                         "name": "Authorization",
                         "in": "header",
@@ -410,7 +410,7 @@ const docTemplate = `{
         },
         "/lockers/{id}/hold": {
             "post": {
-                "description": "특정 사물함을 선점합니다 (5분간 예약). Redis와 DB를 통해 동시성 제어를 하며, 성공 시 사물함 정보를 반환합니다. 신청 기간 외에는 접근이 불가능합니다.",
+                "description": "특정 사물함을 선점합니다 (1분간 예약). Redis와 DB를 통해 동시성 제어를 하며, 성공 시 사물함 정보를 반환합니다. 신청 기간 외에는 접근이 불가능합니다.",
                 "consumes": [
                     "application/json"
                 ],
@@ -424,7 +424,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "default": "Bearer ",
+                        "default": "Bearer",
                         "description": "Bearer {access_token}",
                         "name": "Authorization",
                         "in": "header",
@@ -497,7 +497,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "default": "Bearer ",
+                        "default": "Bearer",
                         "description": "Bearer {access_token}",
                         "name": "Authorization",
                         "in": "header",
@@ -564,7 +564,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "default": "Bearer ",
+                        "default": "Bearer",
                         "description": "Bearer {access_token}",
                         "name": "Authorization",
                         "in": "header",
@@ -674,7 +674,7 @@ const docTemplate = `{
             "properties": {
                 "expires_in": {
                     "type": "string",
-                    "example": "5 minutes"
+                    "example": "1 minutes"
                 },
                 "locker": {
                     "$ref": "#/definitions/handlers.LockerResponse"
@@ -727,6 +727,9 @@ const docTemplate = `{
                 "owner": {
                     "description": "null 가능",
                     "type": "string"
+                },
+                "owner_serial_id": {
+                    "type": "integer"
                 }
             }
         },
@@ -833,7 +836,7 @@ const docTemplate = `{
                 },
                 "serial_id": {
                     "type": "integer",
-                    "example": 123456789012
+                    "example": 1234567890
                 },
                 "student_id": {
                     "type": "string",
