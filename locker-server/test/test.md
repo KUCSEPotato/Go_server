@@ -1,41 +1,16 @@
-{
-  "name": "이정민",
-  "phone_number": "01023493307",
-  "student_id": "2023320060"
-}
+[ 정보대학 예비군 버스 안내 ]
 
-{
-  "access_token": "eyJhbGciOiJIUzI1NiIsImtpZCI6ImhzMjU2LW1haW4iLCJ0eXAiOiJKV1QifQ.eyJhdWQiOiJsb2NrZXItYXBwLXVzZXJzIiwiZXhwIjoxNzU3NTk4NjMxLCJpYXQiOjE3NTc1OTY4MzEsImlzcyI6ImxvY2tlci1zZXJ2ZXItcHJvZCIsImp0aSI6IlV2LXJaV2pjSUJDdUZVZHdWVVVPc3ciLCJzdWIiOiIyMDIzMzIwMDYwIn0.kS4p9O54QiyHvnm9Gtjkgm62ZNjBYmYLRv8mRe3bHWA",
-  "refresh_token": "4S_wbBmUOnIRkB2YwbL4knksh-dLCliHLS-eZOANLUM",
-  "serial_id": 972712109207
-}
+안녕하세요, 정보대학 학생회장 김민재입니다.
 
-{
-  "student_id": "2023320006",
-  "name": "김민재",
-  "phone_number": "01066248869"
-}
+9/17(수) 정보대학 예비군 조식 관련 안내사항을 공지해 드립니다.
 
-{
-  "name": "홍길동",
-  "phone_number": "01012345678",
-  "student_id": "2023320001"
-}
+<조식(천원의 아침밥) 배부 안내>
+- 배부 시간: 오전 7시 10분부터
+- 배부 장소: 버스 탑승 시 (탑승 전 수령해주시기 바랍니다)
+- 버스 탑승 시간: 오전 7시 20분
 
-{
-  "access_token": "eyJhbGciOiJIUzI1NiIsImtpZCI6ImhzMjU2LW1haW4iLCJ0eXAiOiJKV1QifQ.eyJhdWQiOiJsb2NrZXItYXBwLXVzZXJzIiwiZXhwIjoxNzU3NTk4NjU3LCJpYXQiOjE3NTc1OTY4NTcsImlzcyI6ImxvY2tlci1zZXJ2ZXItcHJvZCIsImp0aSI6Ild4NW9XN19fZHhnUVJ4aDZGZVFnaEEiLCJzdWIiOiIyMDIzMzIwMDAxIn0.nnzRJ3lvWyxkbmgcUhCBY9LWOjLJzwHLXDeLF_sHaUE",
-  "refresh_token": "OoZIQHjzNCpBAQu6g0myVMXeDOlAU_6AD5CqvwtFTf4",
-  "serial_id": 667627703821
-}
+관련 문의는 학생회장 김민재 (010-6624-8869)에게 부탁드립니다.
 
-{
-  "name": "이정민",
-  "phone_number": "01087654321",
-  "student_id": "2023320002"
-}
+감사합니다.
 
-{
-  "access_token": "eyJhbGciOiJIUzI1NiIsImtpZCI6ImhzMjU2LW1haW4iLCJ0eXAiOiJKV1QifQ.eyJhdWQiOiJsb2NrZXItYXBwLXVzZXJzIiwiZXhwIjoxNzU3NTk4Njc5LCJpYXQiOjE3NTc1OTY4NzksImlzcyI6ImxvY2tlci1zZXJ2ZXItcHJvZCIsImp0aSI6InpLVHduc1FETjJjeWpPSlkwaGVqb3ciLCJzdWIiOiIyMDIzMzIwMDAyIn0.VPp9YvbUpy11aHEYYP_ZctDTdqlEOU2X4F1cWiRyI_4",
-  "refresh_token": "AWlGWQksYRnaPH8I3y4ClBpdr4Jm3Hu6kTWayv4nxaw",
-  "serial_id": 789851668725
-}
+게시물 담당자/책임자: 정보대학 학생회장 김민재

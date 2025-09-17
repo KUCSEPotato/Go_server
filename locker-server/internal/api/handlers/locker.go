@@ -41,14 +41,14 @@ type LockerResponse struct {
 type HoldSuccessResponse struct {
 	Message   string         `json:"message" example:"locker held successfully"`
 	Locker    LockerResponse `json:"locker"`
-	ExpiresIn string         `json:"expires_in" example:"5 minutes"`
+	ExpiresIn string         `json:"expires_in" example:"1 minutes"`
 }
 
 // Hold Fallback Response
 type HoldFallbackResponse struct {
 	Message   string `json:"message" example:"locker held successfully"`
 	LockerID  int    `json:"locker_id" example:"101"`
-	ExpiresIn string `json:"expires_in" example:"5 minutes"`
+	ExpiresIn string `json:"expires_in" example:"1 minutes"`
 }
 
 // List Lockers Response
@@ -123,12 +123,12 @@ func ListLockers(d Deps) fiber.Handler {
 }
 
 // HoldLocker: 사물함 "선점"
-// 1) Redis SETNX(key, student, TTL=5분) → 성공 시 첫 클릭 인정
+// 1) Redis SETNX(key, student, TTL=1분) → 성공 시 첫 클릭 인정
 // 2) DB에 locker_assignments(state='hold') 기록 (부분 유니크 인덱스로 중복 방지)
 // - 실패 케이스: 이미 hold/confirmed가 존재 → 409
 // HoldLocker godoc
 // @Summary      사물함 선점
-// @Description  특정 사물함을 선점합니다 (5분간 예약). Redis와 DB를 통해 동시성 제어를 하며, 성공 시 사물함 정보를 반환합니다. 신청 기간 외에는 접근이 불가능합니다.
+// @Description  특정 사물함을 선점합니다 (1분간 예약). Redis와 DB를 통해 동시성 제어를 하며, 성공 시 사물함 정보를 반환합니다. 신청 기간 외에는 접근이 불가능합니다.
 // @Tags         lockers
 // @Accept       json
 // @Produce      json
@@ -172,7 +172,7 @@ func HoldLocker(d Deps) fiber.Handler {
 		// Redis 키: "locker:hold:{id}"
 		key := "locker:hold:" + strconv.Itoa(id)
 
-		// SETNX: 키가 없을 때만 set + TTL(5분). true=성공(첫 클릭), false=이미 누군가 보유중
+		// SETNX: 키가 없을 때만 set + TTL(1분). true=성공(첫 클릭), false=이미 누군가 보유중
 		// [250908] 1분으로 변경 테스트
 		ok, err := d.RDB.SetNX(c.Context(), key, serialID, 1*time.Minute).Result()
 		if err != nil {
