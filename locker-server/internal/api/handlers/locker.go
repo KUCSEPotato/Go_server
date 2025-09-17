@@ -146,12 +146,12 @@ func HoldLocker(d Deps) fiber.Handler {
 		// 신청 시작 시간 체크
 		now := time.Now()
 		if lockerApplicationStartErr == nil && now.Before(lockerApplicationStart) {
-			return fiber.NewError(fiber.StatusForbidden, "아직 신청 기간이 아닙니다. 신청 시작: "+lockerApplicationStart.Format("2006-01-02 15:04:05"))
+			return fiber.NewError(fiber.StatusForbidden, "아직 신청 기간이 아닙니다. 신청 시작: "+lockerApplicationStart.Format("2025-10-15 15:04:05"))
 		}
 
 		// 신청 마감 시간 체크
 		if lockerApplicationEndErr == nil && now.After(lockerApplicationEnd) {
-			return fiber.NewError(fiber.StatusForbidden, "신청 기간이 마감되었습니다. 신청 마감: "+lockerApplicationEnd.Format("2006-01-02 15:04:05"))
+			return fiber.NewError(fiber.StatusForbidden, "신청 기간이 마감되었습니다. 신청 마감: "+lockerApplicationEnd.Format("2025-10-15 15:04:05"))
 		}
 
 		// URL 파라미터에서 locker id 추출
@@ -188,7 +188,7 @@ func HoldLocker(d Deps) fiber.Handler {
 		// * 유니크 인덱스가 마지막 안전망(한 locker/한 user당 활성 1건)
 		_, err = d.DB.Exec(c.Context(),
 			`INSERT INTO locker_assignments(locker_id, user_serial_id, state, hold_expires_at)
-			 VALUES ($1,$2,'hold', now() + interval '5 minutes')`,
+			 VALUES ($1,$2,'hold', now() + interval '1 minutes')`,
 			id, serialID)
 		if err != nil {
 			// DB에서 막히면 Redis 키를 삭제(베스트 에포트)
@@ -209,7 +209,7 @@ func HoldLocker(d Deps) fiber.Handler {
 			return c.Status(fiber.StatusCreated).JSON(HoldFallbackResponse{
 				Message:   "locker held successfully",
 				LockerID:  id,
-				ExpiresIn: "5 minutes",
+				ExpiresIn: "1 minutes",
 			})
 		}
 
@@ -217,7 +217,7 @@ func HoldLocker(d Deps) fiber.Handler {
 		return c.Status(fiber.StatusCreated).JSON(HoldSuccessResponse{
 			Message:   "locker held successfully",
 			Locker:    lockerInfo,
-			ExpiresIn: "5 minutes",
+			ExpiresIn: "1 minutes",
 		})
 	}
 }
