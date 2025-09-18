@@ -1,12 +1,13 @@
 package handlers
 
+/*
 import (
 	"context"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
-
+*/
 // User 유저 정보
 // @Description users 테이블의 한 레코드(민감정보 제외)
 type User struct {
@@ -22,6 +23,7 @@ type ListUsersResponse struct {
 	Users []User `json:"users"`
 }
 
+/*
 // GetAllUsersHandler godoc
 // @Summary      모든 유저 조회
 // @Description  users 테이블의 전체 유저를 조회하고, 총 개수도 함께 반환합니다.
@@ -65,3 +67,4 @@ func GetAllUsersHandler(db *pgxpool.Pool) fiber.Handler {
 		})
 	}
 }
+*/
