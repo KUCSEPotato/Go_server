@@ -454,6 +454,42 @@ go run ./cmd/server/main.go
 
 이 프로젝트는 고려대학교 정보대학 제9대 학생회에서 관리합니다.
 
+### 참여자
+
+<div align="center">
+
+<table>
+<tr>
+<td align="center">
+<a href="https://github.com/KUCSEPotato">
+<img src="https://github.com/KUCSEPotato.png" width="150px;" alt=""/>
+<br />
+<b>이정민</b>
+</a>
+<br />
+<a href="https://github.com/KUCSEPotato">GitHub: @KUCSEPotato</a>
+<br />
+<sub>고려대학교 컴퓨터학과 23학번</sub>
+</td>
+<td align="center">
+<a href="https://github.com/hansungkd">
+<img src="https://github.com/hansungkd.png" width="150px;" alt=""/>
+<br />
+<b>김한성</b>
+</a>
+<br />
+<a href="https://github.com/hansungkd">GitHub: @hansungkd</a>
+<br />
+<sub>고려대학교 컴퓨터학과 24학번</sub>
+</td>
+</tr>
+</table>
+
+</div>
+
+
+
+
 ## 라이센스
 
 This project is private and proprietary.
