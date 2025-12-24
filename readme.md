@@ -456,27 +456,36 @@ go run ./cmd/server/main.go
 
 ### 참여자
 
-<table>
+<table align="center">
   <tr>
-    <td align="center" width="33%">
-      <img src="https://github.com/KUCSEPotato.png" width="150px;" alt=""/><br />
-      <b>이름</b><br />
-      <sub>이정민</sub><br />
-      <br />
-      <a href="https://github.com/KUCSEPotato">GitHub: @KUCSEPotato</a><br />
-      <br />
-      <sub>고려대학교 컴퓨터학과</sub>
+    <td align="center" width="300">
+      <img src="https://github.com/KUCSEPotato.png"
+           width="140"
+           style="border-radius: 50%; margin-bottom: 10px;" />
+      <h3>이정민</h3>
+      <p>
+        <a href="https://github.com/KUCSEPotato">
+          <b>GitHub</b> · @KUCSEPotato
+        </a>
+      </p>
+      <sub>고려대학교 컴퓨터학과 23학번</sub>
     </td>
-    <td align="center" width="33%">
-      <img src="https://github.com/hansungkd.png" width="150px;" alt=""/><br />
-      <b>이름</b><br />
-      <sub>김한성</sub><br />
-      <br />
-      <a href="https://github.com/hansungkd">GitHub: @hansungkd</a><br />
-      <br />
-      <sub>고려대학교 컴퓨터학과</sub>
+
+    <td align="center" width="300">
+      <img src="https://github.com/hansungkd.png"
+           width="140"
+           style="border-radius: 50%; margin-bottom: 10px;" />
+      <h3>김한성</h3>
+      <p>
+        <a href="https://github.com/hansungkd">
+          <b>GitHub</b> · @hansungkd
+        </a>
+      </p>
+      <sub>고려대학교 컴퓨터학과 24학번</sub>
+    </td>
   </tr>
 </table>
+
 
 ## 라이센스
 
