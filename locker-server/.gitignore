@@ -1,5 +1,10 @@
-./tests
-./configs/.env.prod
-./locker_db_dump_new.sql
-./locker.dump
-./db_cleanup_and_migration.sql
+# tests
+tests/
+
+# env
+configs/.env.prod
+
+# db dumps / sql
+locker_db_dump_new.sql
+locker.dump
+db_cleanup_and_migration.sql
