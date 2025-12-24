@@ -1,61 +1,50 @@
-# Multi-stage build for production
+# syntax=docker/dockerfile:1
+
+############################
+# 1) Build stage
+############################
 FROM golang:1.23 AS builder
 
-# Install build dependencies
+# 빌드에 필요한 최소 도구만
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     tzdata \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Set working directory
 WORKDIR /app
 
-# Copy go mod files
+# 의존성 캐시 최적화
 COPY go.mod go.sum ./
-
-# Download dependencies
 RUN go mod download
 
-# Install swag for generating swagger docs
-RUN go install github.com/swaggo/swag/cmd/swag@latest
-
-# Copy source code
+# 소스 복사
 COPY . .
 
-# Generate swagger documentation
-RUN swag init -g cmd/server/main.go
+# 민감 ENV(예: DB_URL, JWT 등) 정의 금지!
+# 빌드 관련 고정값만 사용
+ENV CGO_ENABLED=0 GOOS=linux
 
-# Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main ./cmd/server
+# 메인 패키지 경로가 리포지토리 루트(./)라고 가정
+# (만약 ./cmd/server 가 메인이라면 끝 경로를 ./cmd/server 로 바꿔주세요)
+RUN go build -trimpath -ldflags="-s -w" -o /bin/locker-server ./cmd/server/main.go
 
-# Production stage
-FROM alpine:latest
+############################
+# 2) Runtime stage
+############################
+FROM alpine:3.20
 
-# Install ca-certificates
-RUN apk --no-cache add ca-certificates tzdata
+# 런타임 필수 패키지
+RUN apk add --no-cache ca-certificates tzdata && \
+    adduser -D -g '' app
 
-# Create non-root user
-RUN addgroup -g 1001 appgroup && \
-    adduser -D -s /bin/sh -u 1001 -G appgroup appuser
-
-# Create app directory
+USER app
 WORKDIR /app
 
-# Copy binary from builder stage
-COPY --from=builder /app/main .
+# 실행 바이너리만 복사
+COPY --from=builder /bin/locker-server ./locker-server
 
-# Copy docs folder (swagger)
-COPY --from=builder /app/docs ./docs
-
-# Change ownership
-RUN chown -R appuser:appgroup /app
-
-# Switch to non-root user
-USER appuser
-
-# Expose port
+# 앱 기본 포트(실행 시점에 compose에서 매핑)
 EXPOSE 3000
 
-# Run the application
-CMD ["./main"]
+CMD ["./locker-server"]
