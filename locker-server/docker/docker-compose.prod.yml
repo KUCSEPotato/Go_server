@@ -2,10 +2,12 @@ services:
   postgres:
     image: postgres:16
     container_name: locker-prod-pg
+    env_file:
+      - ../configs/.env.prod
     environment:
       POSTGRES_DB: locker
       POSTGRES_USER: locker
-      POSTGRES_PASSWORD: kuci_info_student_council_secure
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "5433:5432"  # 호스트:컨테이너 (외부에서는 5433으로 접근)
     volumes:
