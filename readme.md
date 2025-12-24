@@ -368,7 +368,7 @@ locker-server/
 
 ---
 
-## 테스트
+## 테스트 (.gitignore)
 
 ### 부하 테스트
 
