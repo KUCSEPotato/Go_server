@@ -1,10 +1,14 @@
-# tests
-tests/
-
 # env
 configs/.env.prod
 
-# db dumps / sql
-locker_db_dump_new.sql
+# tests
+tests/
+
+# db dumps / local sql
 locker.dump
+locker_db_dump_new.sql
 db_cleanup_and_migration.sql
+
+# python
+__pycache__/
+venv/
