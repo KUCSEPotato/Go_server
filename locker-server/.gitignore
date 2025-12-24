@@ -8,6 +8,7 @@ tests/
 locker.dump
 locker_db_dump_new.sql
 db_cleanup_and_migration.sql
+.DS_Store
 
 # python
 __pycache__/
