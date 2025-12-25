@@ -54,7 +54,7 @@
 
 ### 사물함 관리
 - **목록 조회**: 전체 사물함 정보 및 점유 상태 확인
-- **선점(Hold)**: Redis 원자 연산을 통한 15분 임시 선점
+- **선점(Hold)**: Redis 원자 연산을 통한 1분 임시 선점 (선점 시간 변경은 /locker-server/internal/api/handlers/locker.go 의 HoldLocker 함수)
 - **확정(Confirm)**: 선점한 사물함 최종 확정
 - **해제(Release)**: 사물함 반납 및 상태 초기화
 - **내 사물함 조회**: 현재 소유한 사물함 정보
@@ -286,7 +286,7 @@ curl -X POST http://localhost:3000/api/v1/auth/refresh \
 - `locker_id` (integer, FK → locker_info): 사물함 번호
 - `user_serial_id` (bigint, FK → users.serial_id): 사용자 ID
 - `state` (assignment_state ENUM): 'hold', 'confirmed', 'cancelled', 'expired'
-- `hold_expires_at` (timestamp): 선점(hold) 만료 시각 (15분)
+- `hold_expires_at` (timestamp): 선점(hold) 만료 시각 (1분)
 - `confirmed_at` (timestamp): 확정 시각
 - `released_at` (timestamp): 해제 시각
 - `created_at` (timestamp): 배정 생성 시각
